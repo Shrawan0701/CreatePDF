@@ -4,30 +4,139 @@ import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { Document, Packer, Paragraph, Table, TableCell, TableRow } from 'docx'
 import { ToolPage } from '../../components/ToolPage'
-import { DropZone, FileItem, ProgressBar, downloadBlob } from '../../components/ui'
+import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
-import { extractEmbeddedImages, extractLayout, extractText, getPdfLib, getPdfjsLib, loadPdfBytes, renderPageToCanvas } from '../../services/pdfEngine'
+import { extractEmbeddedImages, extractLayout, getPdfLib } from '../../services/pdfEngine'
+import { richHtmlToPdf } from '../../services/richPdf'
+import { pdfToEpub, pdfToHtml, pdfToPresentation, pdfToWorkbook } from '../../services/documentExports'
+import { wordToPdf } from '../../services/wordImport'
+import { parseCsv } from '../../services/csv'
 
-async function plainTextPdf(text) {
-  const { PDFDocument, StandardFonts, rgb } = await getPdfLib(); const pdf = await PDFDocument.create(); const font = await pdf.embedFont(StandardFonts.Helvetica); const size = 10; const margin = 42; const width = 595; const height = 842; let page = pdf.addPage([width, height]); let y = height - margin
-  for (const paragraph of text.replace(/\r/g, '').split('\n')) { const words = paragraph.split(/\s+/); let line = ''; for (const word of words) { const candidate = line ? `${line} ${word}` : word; if (font.widthOfTextAtSize(candidate, size) > width - margin * 2 && line) { if (y < margin) { page = pdf.addPage([width, height]); y = height - margin } page.drawText(line, { x: margin, y, size, font, color: rgb(.08, .09, .12) }); y -= 15; line = word } else line = candidate } if (y < margin) { page = pdf.addPage([width, height]); y = height - margin } page.drawText(line, { x: margin, y, size, font }); y -= 17 }
-  return new Blob([await pdf.save()], { type: 'application/pdf' })
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
+
+
+function excelCellText(value) {
+  if (value == null) return ''
+  if (value instanceof Date) return value.toLocaleDateString()
+  if (typeof value === 'object') {
+    if (value.text != null) return String(value.text)
+    if (value.result != null) return excelCellText(value.result)
+    if (value.error) return String(value.error)
+    if (value.formula) return `=${value.formula}`
+    if (Array.isArray(value.richText)) return value.richText.map((part) => part.text).join('')
+    return ''
+  }
+  return String(value)
 }
 
-async function docxToText(file) {
+function spreadsheetCellText(cell) {
+  if (cell.isMerged && cell.master.address !== cell.address) return ''
+  return excelCellText(cell.type === ExcelJS.ValueType.Formula && cell.result !== undefined ? cell.result : cell.value)
+}
+
+async function loadWorkbook(file) {
+  const workbook = new ExcelJS.Workbook()
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    const sheet = workbook.addWorksheet('CSV')
+    parseCsv(await file.text()).forEach((values) => sheet.addRow(values))
+  } else await workbook.xlsx.load(await file.arrayBuffer())
+  if (!workbook.worksheets.length) throw new Error('This workbook contains no worksheets.')
+  return workbook
+}
+
+async function workbookToPdf(workbook, selected, options) {
+  const sheets = workbook.worksheets.filter((sheet) => selected.includes(sheet.name))
+  if (!sheets.length) throw new Error('Select at least one worksheet.')
+  const html = sheets.map((sheet, sheetIndex) => {
+    const rows = []
+    sheet.eachRow({ includeEmpty: false }, (row) => {
+      const cells = []
+      for (let index = 1; index <= sheet.columnCount; index++) {
+        const cell = row.getCell(index)
+        const value = spreadsheetCellText(cell)
+        cells.push(`<td>${escapeHtml(value)}</td>`)
+      }
+      rows.push(`<tr>${cells.join('')}</tr>`)
+    })
+    return `<section${sheetIndex ? ' data-page-break="before"' : ''}><h2>${escapeHtml(sheet.name)}</h2><table>${rows.join('')}</table></section>`
+  }).join('')
+  return richHtmlToPdf(html || '<p>Empty workbook</p>', { ...options, tableMinColumnWidth: options.scaling === 'compact' ? 45 : 65 })
+}
+
+async function powerpointToPdf(file, progress) {
   const zip = await JSZip.loadAsync(file)
-  const xml = await zip.file('word/document.xml')?.async('string')
-  if (!xml) throw new Error('Invalid DOCX document.')
-  const document = new DOMParser().parseFromString(xml, 'text/xml')
-  const body = document.getElementsByTagName('w:body')[0]
-  const blocks = []
-  for (const block of body?.children || []) {
-    if (block.localName === 'p') blocks.push([...block.getElementsByTagName('w:t')].map((node) => node.textContent).join(''))
-    if (block.localName === 'tbl') {
-      for (const row of block.getElementsByTagName('w:tr')) blocks.push([...row.getElementsByTagName('w:tc')].map((cell) => [...cell.getElementsByTagName('w:t')].map((node) => node.textContent).join('')).join(' | '))
-    }
+  const presentation = new DOMParser().parseFromString(await zip.file('ppt/presentation.xml')?.async('string') || '', 'text/xml')
+  const slideSize = presentation.getElementsByTagName('p:sldSz')[0]
+  const slideWidth = Number(slideSize?.getAttribute('cx') || 12192000)
+  const slideHeight = Number(slideSize?.getAttribute('cy') || 6858000)
+  const width = 960
+  const height = width * slideHeight / slideWidth
+  const scale = width / slideWidth
+  const slides = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name)).sort((left, right) => Number(left.match(/slide(\d+)/)[1]) - Number(right.match(/slide(\d+)/)[1]))
+  if (!slides.length) throw new Error('No slides found in the PowerPoint file.')
+  const { PDFDocument, StandardFonts, rgb } = await getPdfLib()
+  const output = await PDFDocument.create()
+  const regular = await output.embedFont(StandardFonts.Helvetica)
+  const bold = await output.embedFont(StandardFonts.HelveticaBold)
+  const colorFrom = (element, fallback = '#111827') => {
+    const value = element?.getElementsByTagName('a:srgbClr')[0]?.getAttribute('val') || fallback.slice(1)
+    return rgb(parseInt(value.slice(0, 2), 16) / 255, parseInt(value.slice(2, 4), 16) / 255, parseInt(value.slice(4, 6), 16) / 255)
   }
-  return blocks.join('\n')
+  const geometry = (element) => {
+    const transform = element.getElementsByTagName('a:xfrm')[0]
+    const offset = transform?.getElementsByTagName('a:off')[0]
+    const extent = transform?.getElementsByTagName('a:ext')[0]
+    if (!offset || !extent) return null
+    const x = Number(offset.getAttribute('x')) * scale
+    const boxWidth = Number(extent.getAttribute('cx')) * scale
+    const boxHeight = Number(extent.getAttribute('cy')) * scale
+    const y = height - Number(offset.getAttribute('y')) * scale - boxHeight
+    return { x, y, width: boxWidth, height: boxHeight }
+  }
+  for (let index = 0; index < slides.length; index++) {
+    const slidePath = slides[index]
+    const document = new DOMParser().parseFromString(await zip.file(slidePath).async('string'), 'text/xml')
+    const page = output.addPage([width, height])
+    const relationships = await zip.file(slidePath.replace(/([^/]+)$/, '_rels/$1.rels'))?.async('string')
+    const relationDoc = new DOMParser().parseFromString(relationships || '', 'text/xml')
+    const media = new Map([...relationDoc.getElementsByTagName('Relationship')].map((entry) => [entry.getAttribute('Id'), entry.getAttribute('Target')]))
+    const tree = document.getElementsByTagName('p:spTree')[0]
+    for (const element of tree?.children || []) {
+      const box = geometry(element)
+      if (!box) continue
+      if (element.localName === 'pic') {
+        const relation = element.getElementsByTagName('a:blip')[0]?.getAttribute('r:embed')
+        const target = media.get(relation)
+        if (!target) continue
+        const imagePath = new URL(target, `https://package.local/${slidePath.slice(0, slidePath.lastIndexOf('/') + 1)}`).pathname.slice(1)
+        const imageFile = zip.file(imagePath)
+        if (!imageFile) continue
+        const bytes = await imageFile.async('uint8array')
+        const image = /\.jpe?g$/i.test(imagePath) ? await output.embedJpg(bytes) : /\.png$/i.test(imagePath) ? await output.embedPng(bytes) : null
+        if (image) page.drawImage(image, box)
+        continue
+      }
+      if (element.localName !== 'sp') continue
+      const properties = element.getElementsByTagName('p:spPr')[0]
+      const fill = properties?.getElementsByTagName('a:solidFill')[0]
+      if (fill?.getElementsByTagName('a:srgbClr').length) page.drawRectangle({ ...box, color: colorFrom(fill) })
+      const paragraphs = [...element.getElementsByTagName('a:p')]
+      if (!paragraphs.length) continue
+      let cursor = box.y + box.height - 18
+      for (const paragraph of paragraphs) {
+        const text = [...paragraph.getElementsByTagName('a:t')].map((item) => item.textContent).join('')
+        if (!text) { cursor -= 16; continue }
+        const run = paragraph.getElementsByTagName('a:rPr')[0]
+        const size = Math.max(8, Math.min(40, Number(run?.getAttribute('sz') || 1800) / 100 * width / 960))
+        const font = run?.getAttribute('b') === '1' ? bold : regular
+        const draw = text.replace(/[^\x20-\xFF]/g, '?')
+        page.drawText(draw, { x: box.x + 7, y: cursor, size, font, color: colorFrom(run), maxWidth: Math.max(10, box.width - 14), lineHeight: size * 1.25 })
+        cursor -= size * 1.35
+      }
+    }
+    progress(Math.round((index + 1) / slides.length * 90))
+  }
+  return new Blob([await output.save()], { type: 'application/pdf' })
 }
 
 function ImportTool({ toolId, accept, convert, note }) {
@@ -36,26 +145,124 @@ function ImportTool({ toolId, accept, convert, note }) {
   return <ToolPage toolId={toolId}><div className="tool-panel"><DropZone accept={accept} onFiles={([selected]) => setFile(selected)}><FileInput size={30} /><div className="drop-zone-title">Choose source document</div><div className="drop-zone-sub">{note}</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => setFile(null)} /></div>}</div>{busy && <ProgressBar value={progress} label="Converting document" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Convert and download</button></ToolPage>
 }
 
-export function WordToPdf() { return <ImportTool toolId="word-to-pdf" accept={['.docx']} note="DOCX paragraphs and table rows are read directly from the Open XML package." convert={async (file, progress) => { const text = await docxToText(file); progress(70); return { blob: await plainTextPdf(text), name: file.name.replace(/\.docx$/i, '.pdf') } }} /> }
-export function ExcelToPdf() { return <ImportTool toolId="excel-to-pdf" accept={['.xlsx', '.csv']} note="Workbook sheets, rows, and columns are converted into printable table text." convert={async (file, progress) => { const workbook = new ExcelJS.Workbook(); if (file.name.toLowerCase().endsWith('.csv')) { const rows = (await file.text()).split(/\r?\n/).filter(Boolean).map((line) => line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, ''))); const sheet = workbook.addWorksheet('CSV'); rows.forEach((row) => sheet.addRow(row)) } else await workbook.xlsx.load(await file.arrayBuffer()); const text = workbook.worksheets.map((sheet) => { const rows = []; sheet.eachRow({ includeEmpty: true }, (row) => rows.push(row.values.slice(1).map((value) => typeof value === 'object' && value?.text ? value.text : String(value ?? '')).map((value) => value.padEnd(18)).join(' | '))); return `SHEET: ${sheet.name}\n${rows.join('\n')}` }).join('\n\n'); progress(70); return { blob: await plainTextPdf(text), name: file.name.replace(/\.(xlsx|csv)$/i, '.pdf') } }} /> }
-export function PowerPointToPdf() { return <ImportTool toolId="powerpoint-to-pdf" accept={['.pptx']} note="Slide text is extracted from the Open XML package in slide order." convert={async (file, progress) => { const zip = await JSZip.loadAsync(file); const slides = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name)).sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0])); const parts = []; for (let index = 0; index < slides.length; index++) { const xml = await zip.file(slides[index]).async('string'); const node = new DOMParser().parseFromString(xml, 'text/xml'); parts.push(`SLIDE ${index + 1}\n${[...node.getElementsByTagName('a:t')].map((item) => item.textContent).join('\n')}`); progress((index + 1) / slides.length * 70) } return { blob: await plainTextPdf(parts.join('\n\n')), name: file.name.replace(/\.pptx$/i, '.pdf') } }} /> }
+export function WordToPdf() { return <ImportTool toolId="word-to-pdf" accept={['.docx']} note="Keeps supported headings, tables, local images, links, and page breaks." convert={async (file, progress) => ({ blob: await wordToPdf(file, progress), name: file.name.replace(/\.docx$/i, '.pdf') })} /> }
+export function ExcelToPdf() {
+  const { showToast } = useApp()
+  const [file, setFile] = useState(null)
+  const [workbook, setWorkbook] = useState(null)
+  const [selected, setSelected] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [options, setOptions] = useState({ pageSize: 'A4', orientation: 'portrait', margin: 36, tableFontSize: 9, scaling: 'readable' })
+  const change = (key, value) => setOptions((current) => ({ ...current, [key]: value }))
+  const choose = async ([source]) => {
+    if (!source) return
+    setFile(source)
+    setWorkbook(null)
+    setBusy(true)
+    setProgress(10)
+    try {
+      const loaded = await loadWorkbook(source)
+      setWorkbook(loaded)
+      setSelected(loaded.worksheets.filter((sheet) => sheet.state !== 'hidden' && sheet.state !== 'veryHidden').map((sheet) => sheet.name))
+    } catch (error) { showToast(error.message, 'error') } finally { setBusy(false); setProgress(0) }
+  }
+  const run = async () => {
+    setBusy(true)
+    setProgress(30)
+    try {
+      const blob = await workbookToPdf(workbook, selected, options)
+      setProgress(100)
+      downloadBlob(blob, file.name.replace(/\.(xlsx|csv)$/i, '.pdf'))
+      showToast('Spreadsheet PDF created.', 'success')
+    } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
+  }
+  const previewSheet = workbook?.worksheets.find((sheet) => selected.includes(sheet.name))
+  const previewRows = previewSheet ? Array.from({ length: Math.min(previewSheet.rowCount, 8) }, (_, rowIndex) => Array.from({ length: Math.min(previewSheet.columnCount, 8) }, (_, columnIndex) => spreadsheetCellText(previewSheet.getCell(rowIndex + 1, columnIndex + 1)))) : []
+  return <ToolPage toolId="excel-to-pdf">
+    <div className="tool-panel"><DropZone accept={['.xlsx', '.csv']} onFiles={choose}><FileInput size={30} /><div className="drop-zone-title">Choose a workbook or CSV</div><div className="drop-zone-sub">Select sheets and set the print layout before exporting.</div></DropZone>{file && <FileItem file={file} onRemove={() => { setFile(null); setWorkbook(null); setSelected([]) }} />}</div>
+    {workbook && <><div className="tool-panel"><div className="tool-panel-title">Worksheets</div><div className="action-row">{workbook.worksheets.map((sheet) => <label className="check-row" key={sheet.id}><input type="checkbox" checked={selected.includes(sheet.name)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, sheet.name] : current.filter((name) => name !== sheet.name))} /> {sheet.name}{sheet.state === 'hidden' || sheet.state === 'veryHidden' ? ' (hidden)' : ''}</label>)}</div><div className="form-grid">
+      <FormGroup label="Page size"><select className="form-select" value={options.pageSize} onChange={(event) => change('pageSize', event.target.value)}><option>A4</option><option>Letter</option></select></FormGroup>
+      <FormGroup label="Orientation"><select className="form-select" value={options.orientation} onChange={(event) => change('orientation', event.target.value)}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></FormGroup>
+      <FormGroup label="Margins (points)"><input className="form-input" type="number" min="20" max="100" value={options.margin} onChange={(event) => change('margin', Number(event.target.value))} /></FormGroup>
+      <FormGroup label="Table text size"><input className="form-input" type="number" min="6" max="14" value={options.tableFontSize} onChange={(event) => change('tableFontSize', Number(event.target.value))} /></FormGroup>
+      <FormGroup label="Column spacing"><select className="form-select" value={options.scaling} onChange={(event) => change('scaling', event.target.value)}><option value="readable">Comfortable columns</option><option value="compact">Compact columns</option></select></FormGroup>
+    </div><p className="form-hint">Wide sheets continue in column groups. Each selected sheet starts on a new page.</p></div>{previewRows.length > 0 && <div className="tool-panel table-preview"><div className="tool-panel-title">{previewSheet.name} preview</div><table><tbody>{previewRows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((value, columnIndex) => rowIndex === 0 ? <th key={columnIndex}>{value}</th> : <td key={columnIndex}>{value}</td>)}</tr>)}</tbody></table><p className="form-hint">Preview shows up to eight rows and columns.</p></div>}</>}
+    {busy && <ProgressBar value={progress} label="Converting spreadsheet" />}<button className="btn btn-primary btn-lg" disabled={!workbook || !selected.length || busy} onClick={run}><Download size={17} /> Convert and download</button>
+  </ToolPage>
+}
+export function PowerPointToPdf() { return <ImportTool toolId="powerpoint-to-pdf" accept={['.pptx']} note="Keeps basic slide positions, text, solid shapes, and embedded PNG/JPEG images. Charts and effects are not supported." convert={async (file, progress) => ({ blob: await powerpointToPdf(file, progress), name: file.name.replace(/\.pptx$/i, '.pdf') })} /> }
 
-function layoutTable(lines) {
-  const rows = lines.filter((line) => line.items.length >= 3)
-  if (rows.length < 2) return null
-  const columns = Math.max(...rows.map((row) => row.items.length))
-  const cells = rows.map((row) => Array.from({ length: columns }, (_, index) => row.items[index]?.text || ''))
-  return new Table({ rows: cells.map((row) => new TableRow({ children: row.map((text) => new TableCell({ children: [new Paragraph(text)] })) })) })
+function layoutTable(lines, pageWidth) {
+  const positions = []
+  for (const item of lines.flatMap((line) => line.items)) {
+    if (!positions.some((position) => Math.abs(position - item.x) < 14)) positions.push(item.x)
+  }
+  positions.sort((left, right) => left - right)
+  if (positions.length < 3 || positions.length > 12) return null
+  const cells = lines.map((line) => {
+    const row = Array(positions.length).fill('')
+    for (const item of line.items) {
+      const column = positions.reduce((best, position, index) => Math.abs(position - item.x) < Math.abs(positions[best] - item.x) ? index : best, 0)
+      row[column] = row[column] ? `${row[column]} ${item.text}` : item.text
+    }
+    return row
+  })
+  const pageLeft = positions[0]
+  const available = Math.max(4000, Math.round((pageWidth - pageLeft * 2) * 20))
+  const widths = positions.map((position, index) => {
+    const next = positions[index + 1] || pageWidth - pageLeft
+    return Math.max(500, Math.round((next - position) * 20))
+  })
+  const total = widths.reduce((sum, width) => sum + width, 0)
+  const columnWidths = widths.map((width) => Math.round(width / total * available))
+  return new Table({ columnWidths, rows: cells.map((row) => new TableRow({ children: row.map((text) => new TableCell({ children: [new Paragraph(text)] })) })) })
 }
 
 function ExportTool({ toolId, format }) {
-  const { showToast } = useApp(); const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0)
-  const run = async () => { setBusy(true); try { const base = file.name.replace(/\.pdf$/i, ''); if (format === 'xlsx') { const pages = await extractLayout(file, setProgress); const workbook = new ExcelJS.Workbook(); pages.forEach((page, pageIndex) => { const xPositions = [...new Set(page.lines.flatMap((line) => line.items.map((item) => Math.round(item.x / 12) * 12)))].sort((a, b) => a - b); const rows = page.lines.map((line) => { const row = Array(xPositions.length).fill(''); line.items.forEach((item) => { const column = xPositions.reduce((best, x, index) => Math.abs(x - item.x) < Math.abs(xPositions[best] - item.x) ? index : best, 0); row[column] = row[column] ? `${row[column]} ${item.text}` : item.text }); return row }); const sheet = workbook.addWorksheet(`Page ${pageIndex + 1}`); rows.forEach((row) => sheet.addRow(row)); sheet.columns.forEach((column, index) => { column.width = Math.min(60, Math.max(10, ...rows.map((row) => String(row[index] || '').length + 2))) }) }); downloadBlob(new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${base}.xlsx`) } else { const text = await extractText(file, setProgress); if (format === 'docx') { const doc = new Document({ sections: [{ children: text.split('\n').map((line) => new Paragraph(line)) }] }); downloadBlob(await Packer.toBlob(doc), `${base}.docx`) } else if (format === 'pptx') { const PptxGenJS = (await import('pptxgenjs')).default; const pptx = new PptxGenJS(); const pdfjs = await getPdfjsLib(); const source = await pdfjs.getDocument({ data: await loadPdfBytes(file) }).promise; for (let pageNumber = 1; pageNumber <= source.numPages; pageNumber++) { const canvas = await renderPageToCanvas(source, pageNumber, 1.3); const slide = pptx.addSlide(); slide.addImage({ data: canvas.toDataURL('image/png'), x: 0, y: 0, w: 10, h: 5.625 }) } const blob = await pptx.write({ outputType: 'blob' }); downloadBlob(blob, `${base}.pptx`) } else if (format === 'html') { const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;'); downloadBlob(new Blob([`<!doctype html><meta charset="utf-8"><title>${base}</title><pre>${escaped}</pre>`], { type: 'text/html' }), `${base}.html`) } else if (format === 'epub') { const zip = new JSZip(); zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' }); zip.file('META-INF/container.xml', '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'); zip.file('OEBPS/book.xhtml', `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${base}</title></head><body><pre>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre></body></html>`); zip.file('OEBPS/content.opf', `<?xml version="1.0"?><package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">${crypto.randomUUID()}</dc:identifier><dc:title>${base}</dc:title><dc:language>en</dc:language></metadata><manifest><item id="book" href="book.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="book"/></spine></package>`); downloadBlob(await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' }), `${base}.epub`) } } showToast(`${format.toUpperCase()} created.`, 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId={toolId}><div className="tool-panel"><DropZone accept={['application/pdf']} onFiles={([selected]) => setFile(selected)}><FileOutput size={30} /><div className="drop-zone-title">Choose a PDF</div><div className="drop-zone-sub">Selectable text is extracted locally. Scanned pages require OCR.</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => setFile(null)} /></div>}</div>{busy && <ProgressBar value={progress} label={`Creating ${format.toUpperCase()}`} />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Download {format.toUpperCase()}</button></ToolPage>
+  const { showToast } = useApp()
+  const [file, setFile] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [pageRange, setPageRange] = useState('')
+  const [outputFormat, setOutputFormat] = useState('xlsx')
+  const [tablesOnly, setTablesOnly] = useState(true)
+  const [packageAssets, setPackageAssets] = useState(false)
+  const [title, setTitle] = useState('')
+  const [fontFamily, setFontFamily] = useState('serif')
+  const [fontSize, setFontSize] = useState(100)
+  const [lineHeight, setLineHeight] = useState(1.5)
+  const [readingLayout, setReadingLayout] = useState('reflow')
+  const notes = {
+    xlsx: 'Extract detected table rows from selected pages into Excel or CSV.',
+    pptx: 'Each PDF page becomes a slide image. Page proportions are preserved.',
+    html: 'Keep page appearance, selectable text, and supported links in HTML.',
+    epub: 'Create a book with a contents page. Scanned pages are included as images.',
+  }
+  const run = async () => {
+    setBusy(true)
+    setProgress(0)
+    try {
+      const convert = { xlsx: pdfToWorkbook, pptx: pdfToPresentation, html: pdfToHtml, epub: pdfToEpub }[format]
+      const result = await convert(file, { pageRange, outputFormat, tablesOnly, packageAssets, title, fontFamily, fontSize, lineHeight, readingLayout }, setProgress)
+      downloadBlob(result.blob, `${file.name.replace(/\.pdf$/i, '')}.${result.extension}`)
+      showToast(`${result.extension.toUpperCase()} created.`, 'success')
+    } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
+  }
+  return <ToolPage toolId={toolId}>
+    <div className="tool-panel"><DropZone accept={['application/pdf']} onFiles={([selected]) => setFile(selected)}><FileOutput size={30} /><div className="drop-zone-title">Choose a PDF</div><div className="drop-zone-sub">{notes[format]}</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => setFile(null)} /></div>}</div>
+    <div className="tool-panel"><div className="form-grid">
+      <FormGroup label="Pages" hint="Leave blank for all pages"><input className="form-input" value={pageRange} onChange={(event) => setPageRange(event.target.value)} placeholder="1-3, 5" /></FormGroup>
+      {format === 'xlsx' && <><FormGroup label="Output format"><select className="form-select" value={outputFormat} onChange={(event) => setOutputFormat(event.target.value)}><option value="xlsx">Excel workbook (.xlsx)</option><option value="csv">CSV (ZIP for multiple pages)</option></select></FormGroup><label className="check-row"><input type="checkbox" checked={tablesOnly} onChange={(event) => setTablesOnly(event.target.checked)} /> Include detected table rows only</label></>}
+      {format === 'html' && <label className="check-row"><input type="checkbox" checked={packageAssets} onChange={(event) => setPackageAssets(event.target.checked)} /> Package HTML and page images in a ZIP</label>}
+      {format === 'epub' && <><FormGroup label="Book title"><input className="form-input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder={file?.name.replace(/\.pdf$/i, '') || 'Book title'} /></FormGroup><FormGroup label="Reading layout"><select className="form-select" value={readingLayout} onChange={(event) => setReadingLayout(event.target.value)}><option value="reflow">Reflow text for reading</option><option value="pages">Keep pages as images</option></select></FormGroup><FormGroup label="Reading font"><select className="form-select" value={fontFamily} onChange={(event) => setFontFamily(event.target.value)}><option value="serif">Serif</option><option value="sans-serif">Sans serif</option></select></FormGroup><FormGroup label="Text size (%)"><input className="form-input" type="number" min="80" max="160" value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} /></FormGroup><FormGroup label="Line spacing"><input className="form-input" type="number" min="1.2" max="2" step="0.1" value={lineHeight} onChange={(event) => setLineHeight(Number(event.target.value))} /></FormGroup></>}
+    </div></div>
+    {busy && <ProgressBar value={progress} label={`Creating ${format.toUpperCase()}`} />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Download {(format === 'xlsx' ? outputFormat : format).toUpperCase()}</button>
+  </ToolPage>
 }
 function LayoutWordTool() {
   const { showToast } = useApp(); const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0)
-  const run = async () => { setBusy(true); try { const pages = await extractLayout(file, setProgress); const children = []; pages.forEach((page, pageIndex) => { if (pageIndex) children.push(new Paragraph({ pageBreakBefore: true })); const tableLines = page.lines.filter((line) => line.items.length >= 4); const table = layoutTable(tableLines); page.lines.filter((line) => !tableLines.includes(line)).forEach((line) => children.push(new Paragraph({ text: line.items.map((item) => item.text).join('    '), indent: { left: Math.round((line.items[0]?.x || 0) * 20) } }))); if (table) children.push(table) }); const doc = new Document({ sections: [{ children }] }); downloadBlob(await Packer.toBlob(doc), `${file.name.replace(/\.pdf$/i, '')}.docx`); showToast('DOCX created with detected table rows.', 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
+  const run = async () => { setBusy(true); try { const pages = await extractLayout(file, setProgress); const children = []; pages.forEach((page, pageIndex) => { if (pageIndex) children.push(new Paragraph({ pageBreakBefore: true })); const left = Math.min(...page.lines.flatMap((line) => line.items.map((item) => item.x)), 48); let index = 0; while (index < page.lines.length) { const group = [page.lines[index]]; while (index + group.length < page.lines.length && page.lines[index + group.length].items.length >= 3 && group.at(-1).items.length >= 3 && page.lines[index + group.length].y - group.at(-1).y < 40) group.push(page.lines[index + group.length]); if (group.length >= 2 && group[0].items.length >= 3) { const table = layoutTable(group, page.width); if (table) { children.push(table); index += group.length; continue } } const line = page.lines[index]; children.push(new Paragraph({ text: line.items.map((item) => item.text).join('    '), indent: { left: Math.max(0, Math.min(6000, Math.round(((line.items[0]?.x || left) - left) * 20))) } })); index += 1 } }); const doc = new Document({ sections: [{ children }] }); downloadBlob(await Packer.toBlob(doc), `${file.name.replace(/\.pdf$/i, '')}.docx`); showToast('DOCX created with detected table rows.', 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
   return <ToolPage toolId="pdf-to-word"><div className="tool-panel"><DropZone accept={['application/pdf']} onFiles={([selected]) => setFile(selected)}><FileOutput size={30} /><div className="drop-zone-title">Choose a PDF</div><div className="drop-zone-sub">Preserves detected rows and columns as editable Word tables.</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => setFile(null)} /></div>}</div>{busy && <ProgressBar value={progress} label="Creating DOCX layout" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Download DOCX</button></ToolPage>
 }
 

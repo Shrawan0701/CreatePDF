@@ -1,45 +1,196 @@
 import { useEffect, useRef, useState } from 'react'
-import { Copy, Download, Eraser, FileText, Link2, PenTool, Play, Plus, Save, Send, Trash2 } from 'lucide-react'
+import { Download, Link2, RotateCcw, Save, Send } from 'lucide-react'
 import { ToolPage } from '../../components/ToolPage'
-import { DropZone, FileItem, FormGroup, downloadBlob, generateId } from '../../components/ui'
+import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob, generateId } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
-import { addPageNumbers, addWatermarkToPdf, compressPdf, rotatePdfPages, getPdfLib } from '../../services/pdfEngine'
-import { getResumes, saveResume, getWhiteboards, saveWhiteboard } from '../../services/storage'
+import { richHtmlToPdf } from '../../services/richPdf'
+import { getResumes, saveResume } from '../../services/storage'
 
-export function WorkflowBuilder() {
-  const { showToast } = useApp(); const [file, setFile] = useState(null); const [steps, setSteps] = useState([{ type: 'compress', value: '' }]); const [busy, setBusy] = useState(false)
-  const run = async () => { setBusy(true); try { let current = file; for (const step of steps) { let blob; if (step.type === 'compress') blob = await compressPdf(current); if (step.type === 'watermark') blob = await addWatermarkToPdf(current, step.value || 'CONFIDENTIAL'); if (step.type === 'numbers') blob = await addPageNumbers(current, {}); if (step.type === 'rotate') blob = await rotatePdfPages(current, Object.fromEntries(Array.from({ length: 1000 }, (_, index) => [index, Number(step.value || 90)]))); current = new File([blob], file.name, { type: 'application/pdf' }) } downloadBlob(current, `workflow-${file.name}`); showToast('Workflow completed.', 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId="pdf-workflow"><div className="tool-panel"><DropZone accept={['application/pdf']} onFiles={([selected]) => setFile(selected)}><FileText size={30} /><div className="drop-zone-title">Choose a PDF</div></DropZone>{file && <FileItem file={file} onRemove={() => setFile(null)} />}</div><div className="tool-panel"><div className="tool-panel-title">Workflow steps</div>{steps.map((step, index) => <div className="workflow-row" key={index}><span>{index + 1}</span><select className="form-select" value={step.type} onChange={(event) => setSteps(steps.map((item, itemIndex) => itemIndex === index ? { ...item, type: event.target.value } : item))}><option value="compress">Optimize</option><option value="watermark">Watermark</option><option value="numbers">Page numbers</option><option value="rotate">Rotate</option></select><input className="form-input" value={step.value} onChange={(event) => setSteps(steps.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} placeholder={step.type === 'watermark' ? 'Text' : step.type === 'rotate' ? '90' : 'No option needed'} /><button className="icon-btn" onClick={() => setSteps(steps.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={14} /></button></div>)}<button className="btn btn-secondary" onClick={() => setSteps([...steps, { type: 'compress', value: '' }])}><Plus size={15} /> Add step</button></div><button className="btn btn-primary btn-lg" disabled={!file || !steps.length || busy} onClick={run}><Play size={17} /> Run workflow</button></ToolPage>
+const emptyResume = () => ({ id: generateId(), name: '', title: '', email: '', phone: '', summary: '', experience: '', education: '', skills: '', projects: '', template: 'modern' })
+const escapeResumeText = (value) => String(value || '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
+const resumeTemplates = {
+  modern: { label: 'Modern', fontFamily: 'sans-serif', headingColor: '#4338ca', margin: 46, fontSize: 11, lineHeight: 1.35 },
+  classic: { label: 'Classic', fontFamily: 'serif', headingColor: '#202938', margin: 50, fontSize: 11, lineHeight: 1.4 },
+  compact: { label: 'Compact', fontFamily: 'sans-serif', headingColor: '#155e75', margin: 36, fontSize: 10, lineHeight: 1.2 },
+}
+function resumeHtml(data) {
+  const contact = [data.email ? `<a href="mailto:${escapeResumeText(data.email)}">${escapeResumeText(data.email)}</a>` : '', data.phone ? `<a href="tel:${escapeResumeText(data.phone.replace(/[^+0-9]/g, ''))}">${escapeResumeText(data.phone)}</a>` : ''].filter(Boolean).join(' · ')
+  const sections = [['Profile', data.summary], ['Experience', data.experience], ['Education', data.education], ['Skills', data.skills], ['Projects', data.projects]].filter(([, value]) => value?.trim())
+  return `<h1>${escapeResumeText(data.name || 'Your Name')}</h1><p><strong>${escapeResumeText(data.title)}</strong></p><p>${contact}</p><hr/>${sections.map(([heading, value]) => `<h3>${heading}</h3>${value.split(/\r?\n/).filter((line) => line.trim()).map((line) => `<p>${escapeResumeText(line)}</p>`).join('')}`).join('')}`
 }
 
 export function ResumeBuilder() {
-  const { showToast } = useApp(); const [data, setData] = useState({ id: generateId(), name: '', title: '', email: '', phone: '', summary: '', experience: '', education: '', skills: '' })
-  useEffect(() => { getResumes().then((items) => items[0] && setData(items[0])) }, [])
-  const field = (key, label, area = false) => <FormGroup label={label}>{area ? <textarea className="form-textarea" value={data[key]} onChange={(event) => setData({ ...data, [key]: event.target.value })} /> : <input className="form-input" value={data[key]} onChange={(event) => setData({ ...data, [key]: event.target.value })} />}</FormGroup>
-  const save = async () => { await saveResume(data); showToast('Resume saved locally.', 'success') }
-  const pdf = async () => { const { PDFDocument, StandardFonts, rgb } = await getPdfLib(); const doc = await PDFDocument.create(); const page = doc.addPage([595, 842]); const regular = await doc.embedFont(StandardFonts.Helvetica); const bold = await doc.embedFont(StandardFonts.HelveticaBold); let y = 790; const line = (text, size = 10, strong = false, color = rgb(.1, .12, .18)) => { for (const part of String(text || '').match(/.{1,85}(?:\s|$)/g) || ['']) { page.drawText(part.trim(), { x: 48, y, size, font: strong ? bold : regular, color }); y -= size * 1.45 } }; line(data.name || 'Your Name', 24, true, rgb(.25, .22, .7)); line(data.title, 13, true); line(`${data.email}  ${data.phone}`, 9); y -= 12; [['PROFILE', data.summary], ['EXPERIENCE', data.experience], ['EDUCATION', data.education], ['SKILLS', data.skills]].forEach(([heading, value]) => { line(heading, 11, true, rgb(.25, .22, .7)); line(value, 10); y -= 10 }); downloadBlob(new Blob([await doc.save()], { type: 'application/pdf' }), `${data.name || 'resume'}.pdf`) }
-  return <ToolPage toolId="resume-builder"><div className="composer-layout"><div className="tool-panel form-grid">{field('name', 'Full name')}{field('title', 'Professional title')}{field('email', 'Email')}{field('phone', 'Phone')}{field('summary', 'Profile', true)}{field('experience', 'Experience', true)}{field('education', 'Education', true)}{field('skills', 'Skills', true)}<div className="action-row"><button className="btn btn-secondary" onClick={save}><Save size={15} /> Save locally</button><button className="btn btn-primary" onClick={pdf}><Download size={15} /> Download PDF</button></div></div><div className="tool-panel"><div className="resume-preview"><h1>{data.name || 'Your Name'}</h1><h3>{data.title}</h3><p>{data.email} {data.phone}</p><hr /><h4>Profile</h4><p>{data.summary}</p><h4>Experience</h4><p>{data.experience}</p><h4>Education</h4><p>{data.education}</p><h4>Skills</h4><p>{data.skills}</p></div></div></div></ToolPage>
+  const { showToast } = useApp()
+  const [data, setData] = useState(emptyResume)
+  const [saved, setSaved] = useState([])
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { getResumes().then((items) => { setSaved(items); if (items[0]) setData({ ...emptyResume(), ...items[0] }) }).catch((error) => showToast(error.message, 'error')) }, [showToast])
+  const template = resumeTemplates[data.template] || resumeTemplates.modern
+  const markup = resumeHtml(data)
+  const field = (key, label, area = false) => <FormGroup label={label}>{area ? <textarea className="form-textarea" value={data[key] || ''} onChange={(event) => setData({ ...data, [key]: event.target.value })} /> : <input className="form-input" value={data[key] || ''} onChange={(event) => setData({ ...data, [key]: event.target.value })} />}</FormGroup>
+  const save = async () => {
+    try { await saveResume({ ...data, updatedAt: Date.now() }); setSaved(await getResumes()); showToast('Resume saved locally.', 'success') } catch (error) { showToast(error.message, 'error') }
+  }
+  const pdf = async () => {
+    setBusy(true)
+    try {
+      downloadBlob(await richHtmlToPdf(markup, { ...template, title: `${data.name || 'Resume'} — Resume` }), `${data.name || 'resume'}.pdf`)
+      showToast('Resume PDF created.', 'success')
+    } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
+  }
+  return <ToolPage toolId="resume-builder"><div className="composer-layout">
+    <div className="tool-panel form-grid">
+      <FormGroup label="Template"><select className="form-select" value={data.template} onChange={(event) => setData({ ...data, template: event.target.value })}>{Object.entries(resumeTemplates).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></FormGroup>
+      {saved.length > 0 && <FormGroup label="Saved resume"><select className="form-select" value={saved.some((resume) => resume.id === data.id) ? data.id : ''} onChange={(event) => { const selected = saved.find((resume) => resume.id === event.target.value); if (selected) setData({ ...emptyResume(), ...selected }) }}><option value="">Choose saved resume</option>{saved.map((resume) => <option value={resume.id} key={resume.id}>{resume.name || 'Untitled resume'}</option>)}</select></FormGroup>}
+      {field('name', 'Full name')}{field('title', 'Professional title')}{field('email', 'Email')}{field('phone', 'Phone')}{field('summary', 'Profile', true)}{field('experience', 'Experience', true)}{field('education', 'Education', true)}{field('skills', 'Skills', true)}{field('projects', 'Projects', true)}
+      <div className="action-row"><button className="btn btn-secondary" onClick={() => setData(emptyResume())}>New resume</button><button className="btn btn-secondary" onClick={save}><Save size={15} /> Save locally</button><button className="btn btn-primary" disabled={busy} onClick={pdf}><Download size={15} /> {busy ? 'Creating…' : 'Download PDF'}</button></div>
+    </div>
+    <div className="tool-panel"><div className="resume-preview" style={{ fontFamily: template.fontFamily, fontSize: template.fontSize, lineHeight: template.lineHeight, '--resume-accent': template.headingColor }} dangerouslySetInnerHTML={{ __html: markup }} /></div>
+  </div></ToolPage>
 }
 
 export function P2PShare() {
-  const { showToast } = useApp(); const peerRef = useRef(null); const channelRef = useRef(null); const chunksRef = useRef([]); const metaRef = useRef(null); const [file, setFile] = useState(null); const [localCode, setLocalCode] = useState(''); const [remoteCode, setRemoteCode] = useState(''); const [status, setStatus] = useState('Idle'); const [connected, setConnected] = useState(false); const [received, setReceived] = useState(null)
-  const setupChannel = (channel) => { channelRef.current = channel; channel.binaryType = 'arraybuffer'; channel.onopen = () => { setConnected(true); setStatus('Direct connection ready') }; channel.onclose = () => { setConnected(false); setStatus('Connection closed') }; channel.onerror = () => { setConnected(false); setStatus('Connection error') }; channel.onmessage = (event) => { if (typeof event.data === 'string') { const message = JSON.parse(event.data); if (message.type === 'meta') { metaRef.current = message; chunksRef.current = [] } if (message.type === 'done' && metaRef.current) { const blob = new Blob(chunksRef.current, { type: metaRef.current.mime }); setReceived({ blob, name: metaRef.current.name }); setStatus('File received') } } else chunksRef.current.push(event.data) } }
-  const peer = () => { const connection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }); peerRef.current = connection; connection.onicecandidate = () => { if (connection.iceGatheringState === 'complete' && connection.localDescription) setLocalCode(btoa(JSON.stringify(connection.localDescription))) }; connection.ondatachannel = (event) => setupChannel(event.channel); return connection }
-  const offer = async () => { const connection = peer(); setupChannel(connection.createDataChannel('file')); await connection.setLocalDescription(await connection.createOffer()); setStatus('Offer created—share your code') }
-  const apply = async () => { try { const description = JSON.parse(atob(remoteCode.trim())); const connection = peerRef.current || peer(); await connection.setRemoteDescription(description); if (description.type === 'offer') await connection.setLocalDescription(await connection.createAnswer()); setStatus(description.type === 'offer' ? 'Answer created—send it back' : 'Connecting…') } catch { showToast('Invalid connection code.', 'error') } }
-  const send = async () => { const channel = channelRef.current; if (!file || channel?.readyState !== 'open') return; channel.send(JSON.stringify({ type: 'meta', name: file.name, mime: file.type, size: file.size })); const buffer = await file.arrayBuffer(); for (let offset = 0; offset < buffer.byteLength; offset += 16384) { while (channel.bufferedAmount > 1048576) await new Promise((resolve) => setTimeout(resolve, 20)); channel.send(buffer.slice(offset, offset + 16384)) } channel.send(JSON.stringify({ type: 'done' })); setStatus('File sent') }
-  return <ToolPage toolId="p2p-share"><div className="tool-panel"><p className="form-hint">Files travel through a WebRTC data channel. Exchange offer/answer codes using any trusted messaging channel. Some networks may require a TURN relay.</p><div className="action-row"><button className="btn btn-primary" onClick={offer}><Link2 size={15} /> Create offer</button><span className="status-pill">{status}</span></div><FormGroup label="Your connection code"><textarea className="form-textarea signal-code" readOnly value={localCode} /></FormGroup><button className="btn btn-secondary" onClick={() => navigator.clipboard.writeText(localCode)}><Copy size={14} /> Copy code</button><FormGroup label="Code received from the other device"><textarea className="form-textarea signal-code" value={remoteCode} onChange={(event) => setRemoteCode(event.target.value)} /></FormGroup><button className="btn btn-secondary" onClick={apply}>Apply remote code</button></div><div className="tool-panel"><DropZone onFiles={([selected]) => setFile(selected)}><Send size={28} /><div className="drop-zone-title">Choose a file to send</div></DropZone>{file && <FileItem file={file} onRemove={() => setFile(null)} />}<button className="btn btn-primary" disabled={!file || !connected} onClick={send}>Send directly</button>{received && <button className="btn btn-primary" onClick={() => downloadBlob(received.blob, received.name)}><Download size={15} /> Download {received.name}</button>}</div></ToolPage>
-}
+  const { showToast } = useApp()
+  const peerRef = useRef(null)
+  const channelRef = useRef(null)
+  const socketRef = useRef(null)
+  const chunksRef = useRef([])
+  const metaRef = useRef(null)
+  const receivedBytesRef = useRef(0)
+  const pendingCandidatesRef = useRef([])
+  const roomRef = useRef('')
+  const roleRef = useRef('')
+  const [file, setFile] = useState(null)
+  const [room, setRoom] = useState(() => crypto.randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase())
+  const [status, setStatus] = useState('Not connected')
+  const [connected, setConnected] = useState(false)
+  const [received, setReceived] = useState(null)
+  const [progress, setProgress] = useState(0)
 
-export function Whiteboard() {
-  const canvasRef = useRef(null); const drawing = useRef(false); const last = useRef(null); const channel = useRef(null); const socket = useRef(null); const [remoteStatus, setRemoteStatus] = useState('Local'); const [color, setColor] = useState('#111827'); const [width, setWidth] = useState(4); const [room, setRoom] = useState(new URLSearchParams(location.search).get('room') || generateId().slice(0, 8))
-  const applyMessage = (message) => { if (message.type === 'clear') return canvasRef.current.getContext('2d').clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); const stroke = message.stroke || message; const context = canvasRef.current.getContext('2d'); context.strokeStyle = stroke.color; context.lineWidth = stroke.width; context.lineCap = 'round'; context.beginPath(); context.moveTo(stroke.from.x, stroke.from.y); context.lineTo(stroke.to.x, stroke.to.y); context.stroke() }
-  const publish = (payload) => { channel.current?.postMessage(payload); if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ room, payload })) }
-  const draw = (stroke, broadcast = true) => { applyMessage({ type: 'stroke', stroke }); if (broadcast) publish({ type: 'stroke', stroke }) }
-  useEffect(() => { const canvas = canvasRef.current; canvas.width = canvas.clientWidth * devicePixelRatio; canvas.height = 600 * devicePixelRatio; canvas.getContext('2d').scale(devicePixelRatio, devicePixelRatio); channel.current = new BroadcastChannel(`createpdf-board-${room}`); channel.current.onmessage = (event) => applyMessage(event.data); const endpoint = import.meta.env.VITE_SIGNALING_URL || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/signal`; try { socket.current = new WebSocket(endpoint); socket.current.onopen = () => { setRemoteStatus('Remote connected'); socket.current.send(JSON.stringify({ room, payload: { type: 'presence' } })) }; socket.current.onmessage = (event) => { const message = JSON.parse(event.data); if (message.type !== 'presence') applyMessage(message) }; socket.current.onerror = () => setRemoteStatus('Local only'); socket.current.onclose = () => setRemoteStatus('Local only') } catch { setRemoteStatus('Local only') } getWhiteboards().then((boards) => { const saved = boards.find((item) => item.id === room); if (saved) { const image = new Image(); image.onload = () => canvas.getContext('2d').drawImage(image, 0, 0, canvas.clientWidth, 600); image.src = saved.image } }); return () => { channel.current?.close(); socket.current?.close() } }, [room])
-  const point = (event) => { const rect = canvasRef.current.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top } }
-  const move = (event) => { if (!drawing.current) return; const next = point(event); const stroke = { from: last.current, to: next, color, width }; draw(stroke); last.current = next }
-  const clear = () => { applyMessage({ type: 'clear' }); publish({ type: 'clear' }) }
-  const save = () => saveWhiteboard({ id: room, image: canvasRef.current.toDataURL(), savedAt: Date.now() })
-  return <ToolPage toolId="whiteboard"><div className="canvas-toolbar"><PenTool size={17} /><span className="status-pill">{remoteStatus}</span><input type="color" value={color} onChange={(event) => setColor(event.target.value)} /><input type="range" min="1" max="30" value={width} onChange={(event) => setWidth(Number(event.target.value))} /><input className="form-input room-input" value={room} onChange={(event) => setRoom(event.target.value)} /><button className="btn btn-secondary" onClick={() => navigator.clipboard.writeText(`${location.origin}${location.pathname}?room=${room}`)}><Copy size={14} /> Share link</button><button className="btn btn-secondary" onClick={clear}><Eraser size={14} /> Clear</button><button className="btn btn-secondary" onClick={save}><Save size={14} /> Save</button><button className="btn btn-primary" onClick={() => canvasRef.current.toBlob((blob) => downloadBlob(blob, 'whiteboard.png'))}><Download size={14} /> PNG</button></div><div className="whiteboard-wrap"><canvas ref={canvasRef} onPointerDown={(event) => { drawing.current = true; last.current = point(event); event.currentTarget.setPointerCapture?.(event.pointerId) }} onPointerMove={move} onPointerUp={() => { drawing.current = false }} onPointerCancel={() => { drawing.current = false }} /></div><p className="form-hint">Room links synchronize locally and through the optional WebSocket signaling service. Document files never pass through it.</p></ToolPage>
+  const signal = (payload) => socketRef.current?.readyState === WebSocket.OPEN && socketRef.current.send(JSON.stringify({ room: roomRef.current, payload }))
+  const setupChannel = (channel) => {
+    channelRef.current = channel
+    channel.binaryType = 'arraybuffer'
+    channel.onopen = () => { setConnected(true); setProgress(0); setStatus('Direct connection ready') }
+    channel.onclose = () => { setConnected(false); setStatus('Direct connection closed') }
+    channel.onerror = () => { setConnected(false); setStatus('Connection error') }
+    channel.onmessage = (event) => {
+      if (typeof event.data === 'string') {
+        const message = JSON.parse(event.data)
+        if (message.type === 'meta') {
+          metaRef.current = message
+          chunksRef.current = []
+          receivedBytesRef.current = 0
+          setReceived(null)
+          setProgress(0)
+          setStatus(`Receiving ${message.name}`)
+        }
+        if (message.type === 'done' && metaRef.current) {
+          if (receivedBytesRef.current === metaRef.current.size) {
+            setReceived({ blob: new Blob(chunksRef.current, { type: metaRef.current.mime }), name: metaRef.current.name })
+            setProgress(100)
+            setStatus('File received')
+          } else setStatus('Transfer incomplete; ask sender to retry')
+        }
+      } else {
+        chunksRef.current.push(event.data)
+        receivedBytesRef.current += event.data.byteLength
+        setProgress(Math.min(100, Math.round((receivedBytesRef.current / Math.max(1, metaRef.current?.size || 1)) * 100)))
+      }
+    }
+  }
+  const createPeer = () => {
+    if (peerRef.current) return peerRef.current
+    const connection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+    peerRef.current = connection
+    connection.ondatachannel = (event) => setupChannel(event.channel)
+    connection.onconnectionstatechange = () => {
+      if (['failed', 'disconnected', 'closed'].includes(connection.connectionState)) {
+        setConnected(false)
+        setStatus(`Connection ${connection.connectionState}`)
+      }
+    }
+    connection.onicecandidate = (event) => {
+      if (event.candidate) signal({ type: 'candidate', candidate: event.candidate })
+    }
+    return connection
+  }
+  const handleSignal = async (message) => {
+    if (message.type === 'peer-ready' && roleRef.current === 'host') {
+      const connection = createPeer()
+      setupChannel(connection.createDataChannel('file'))
+      await connection.setLocalDescription(await connection.createOffer())
+      signal({ type: 'description', description: connection.localDescription })
+      setStatus('Connecting to peer…')
+    }
+    if (message.type === 'description') {
+      const connection = createPeer()
+      await connection.setRemoteDescription(message.description)
+      for (const candidate of pendingCandidatesRef.current) await connection.addIceCandidate(candidate)
+      pendingCandidatesRef.current = []
+      if (message.description.type === 'offer') {
+        await connection.setLocalDescription(await connection.createAnswer())
+        signal({ type: 'description', description: connection.localDescription })
+      }
+    }
+    if (message.type === 'candidate') {
+      const connection = createPeer()
+      if (connection.remoteDescription) await connection.addIceCandidate(message.candidate)
+      else pendingCandidatesRef.current.push(message.candidate)
+    }
+  }
+  const reset = () => {
+    channelRef.current?.close()
+    peerRef.current?.close()
+    socketRef.current?.close()
+    channelRef.current = null
+    peerRef.current = null
+    socketRef.current = null
+    chunksRef.current = []
+    metaRef.current = null
+    pendingCandidatesRef.current = []
+    setConnected(false)
+    setProgress(0)
+    setReceived(null)
+    setStatus('Not connected')
+  }
+  const connect = (role) => {
+    if (!room.trim()) return showToast('Enter a room code.', 'warning')
+    if (!window.WebSocket || !window.RTCPeerConnection) return showToast('This browser does not support peer-to-peer sharing.', 'error')
+    reset()
+    roomRef.current = room.trim().toUpperCase()
+    roleRef.current = role
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const socket = new WebSocket(`${protocol}//${location.host}/signal`)
+    socketRef.current = socket
+    setStatus('Opening secure signaling…')
+    socket.onopen = () => {
+      signal({ type: role === 'host' ? 'host-ready' : 'peer-ready' })
+      setStatus(role === 'host' ? 'Room ready—open it on the other device' : 'Joining room…')
+    }
+    socket.onmessage = (event) => handleSignal(JSON.parse(event.data)).catch(() => setStatus('Could not complete pairing'))
+    socket.onerror = () => setStatus('Signaling unavailable—run the production server')
+    socket.onclose = () => { if (channelRef.current?.readyState !== 'open') setStatus('Signaling closed') }
+  }
+  useEffect(() => () => {
+    channelRef.current?.close()
+    peerRef.current?.close()
+    socketRef.current?.close()
+  }, [])
+  const send = async () => {
+    const channel = channelRef.current
+    if (!file || channel?.readyState !== 'open') return
+    channel.send(JSON.stringify({ type: 'meta', name: file.name, mime: file.type, size: file.size }))
+    setProgress(0)
+    setStatus(`Sending ${file.name}`)
+    for (let offset = 0; offset < file.size; offset += 16384) {
+      while (channel.bufferedAmount > 4 * 1024 * 1024) await new Promise((resolve) => window.setTimeout(resolve, 20))
+      if (channel.readyState !== 'open') { setStatus('Connection lost during transfer'); return }
+      channel.send(await file.slice(offset, offset + 16384).arrayBuffer())
+      setProgress(Math.round((Math.min(file.size, offset + 16384) / file.size) * 100))
+    }
+    channel.send(JSON.stringify({ type: 'done' }))
+    setStatus('File sent')
+  }
+  return <ToolPage toolId="p2p-share"><div className="tool-panel"><p className="form-hint">Create a room on one device, enter the same code on the other, then join. The server exchanges connection details only; file bytes travel directly through WebRTC.</p><FormGroup label="Private room code"><input className="form-input signal-room" value={room} onChange={(event) => setRoom(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20))} /></FormGroup><div className="action-row"><button className="btn btn-primary" onClick={() => connect('host')}><Link2 size={15} /> Create room</button><button className="btn btn-secondary" onClick={() => connect('join')}><Link2 size={15} /> Join room</button><button className="btn btn-secondary" onClick={reset}><RotateCcw size={15} /> Reset</button><span className="status-pill">{status}</span></div></div><div className="tool-panel"><DropZone onFiles={([selected]) => { setFile(selected); setProgress(0) }}><Send size={28} /><div className="drop-zone-title">Choose a file to send</div></DropZone>{file && <FileItem file={file} onRemove={() => setFile(null)} />}{progress > 0 && <ProgressBar value={progress} label={status} />}<div className="action-row"><button className="btn btn-primary" disabled={!file || !connected} onClick={send}>Send directly</button>{received && <button className="btn btn-primary" onClick={() => downloadBlob(received.blob, received.name)}><Download size={15} /> Download {received.name}</button>}</div></div></ToolPage>
 }

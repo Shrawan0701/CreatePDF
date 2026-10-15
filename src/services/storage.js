@@ -2,6 +2,9 @@ import { openDB } from 'idb';
 
 const DB_NAME = 'createpdf-db';
 const DB_VERSION = 1;
+const DATA_STORES = ['recent-files', 'starred-tools', 'preferences', 'documents', 'gst-invoices',
+  'gst-profiles', 'pos-products', 'pos-bills', 'pos-settings', 'workflows',
+  'resume-data', 'whiteboards'];
 
 let dbPromise = null;
 
@@ -135,6 +138,19 @@ export async function deleteDocument(id) {
   await db.delete('documents', id);
 }
 
+export async function getDocuments() {
+  const db = await getDb();
+  const documents = await db.getAll('documents');
+  return documents.sort((left, right) => (right.savedAt || 0) - (left.savedAt || 0));
+}
+
+export async function renameDocument(id, name) {
+  const db = await getDb();
+  const document = await db.get('documents', id);
+  if (!document) throw new Error('Saved document not found.');
+  await db.put('documents', { ...document, name: name.trim() || document.name, savedAt: Date.now() });
+}
+
 // ===== GST INVOICES =====
 export async function saveInvoice(invoice) {
   const db = await getDb();
@@ -242,7 +258,8 @@ export async function saveResume(resume) {
 
 export async function getResumes() {
   const db = await getDb();
-  return db.getAll('resume-data');
+  const resumes = await db.getAll('resume-data');
+  return resumes.sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0));
 }
 
 // ===== WHITEBOARDS =====
@@ -259,12 +276,84 @@ export async function getWhiteboards() {
 // ===== CLEAR ALL =====
 export async function clearAllData() {
   const db = await getDb();
-  const stores = ['recent-files', 'starred-tools', 'documents', 'gst-invoices',
-    'gst-profiles', 'pos-products', 'pos-bills', 'pos-settings', 'workflows',
-    'resume-data', 'whiteboards'];
-  const tx = db.transaction(stores, 'readwrite');
-  await Promise.all(stores.map((s) => tx.objectStore(s).clear()));
+  const tx = db.transaction(DATA_STORES, 'readwrite');
+  await Promise.all(DATA_STORES.map((store) => tx.objectStore(store).clear()));
   await tx.done;
+}
+
+async function serializeValue(value) {
+  if (value instanceof Blob) {
+    const bytes = new Uint8Array(await value.arrayBuffer());
+    let binary = '';
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return { __createPdfType: 'blob', type: value.type, data: btoa(binary) };
+  }
+  if (Array.isArray(value)) return Promise.all(value.map(serializeValue));
+  if (value && typeof value === 'object') {
+    const output = {};
+    for (const [key, item] of Object.entries(value)) output[key] = await serializeValue(item);
+    return output;
+  }
+  return value;
+}
+
+async function deserializeValue(value) {
+  if (value?.__createPdfType === 'blob') {
+    const binary = atob(value.data);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type: value.type || 'application/octet-stream' });
+  }
+  if (Array.isArray(value)) return Promise.all(value.map(deserializeValue));
+  if (value && typeof value === 'object') {
+    const output = {};
+    for (const [key, item] of Object.entries(value)) output[key] = await deserializeValue(item);
+    return output;
+  }
+  return value;
+}
+
+export async function exportAppData() {
+  const db = await getDb();
+  const stores = {};
+  for (const store of DATA_STORES) stores[store] = await serializeValue(await db.getAll(store));
+  return {
+    app: 'CreatePDF.si',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    stores,
+  };
+}
+
+export async function importAppData(backup) {
+  if (backup?.app !== 'CreatePDF.si' || backup?.version !== 1 || !backup.stores) {
+    throw new Error('This is not a supported CreatePDF.si backup.');
+  }
+  const recordsByStore = {};
+  for (const store of DATA_STORES) {
+    if (!Array.isArray(backup.stores[store])) throw new Error(`Backup is missing ${store} records.`);
+    recordsByStore[store] = await deserializeValue(backup.stores[store]);
+  }
+  const db = await getDb();
+  const tx = db.transaction(DATA_STORES, 'readwrite');
+  for (const store of DATA_STORES) {
+    const objectStore = tx.objectStore(store);
+    await objectStore.clear();
+    for (const record of recordsByStore[store]) await objectStore.put(record);
+  }
+  await tx.done;
+}
+
+export async function requestPersistentStorage() {
+  if (!navigator.storage?.persist) return false;
+  return navigator.storage.persist();
+}
+
+export async function isStoragePersistent() {
+  if (!navigator.storage?.persisted) return false;
+  return navigator.storage.persisted();
 }
 
 // ===== STORAGE ESTIMATE =====

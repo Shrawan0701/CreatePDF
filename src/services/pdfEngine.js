@@ -11,8 +11,8 @@ export async function loadPdfBytes(file) {
 }
 
 export async function getPdfLib() {
-  const { PDFDocument, StandardFonts, rgb, degrees, grayscale } = await import('pdf-lib');
-  return { PDFDocument, StandardFonts, rgb, degrees, grayscale };
+  const { PDFDocument, PDFString, StandardFonts, rgb, degrees, grayscale } = await import('pdf-lib');
+  return { PDFDocument, PDFString, StandardFonts, rgb, degrees, grayscale };
 }
 
 export async function getPdfjsLib() {
@@ -24,6 +24,17 @@ export async function getPdfjsLib() {
     ).toString();
   }
   return pdfjsLib;
+}
+
+export async function withPdfDocument(file, process, options = {}) {
+  const pdfjs = await getPdfjsLib();
+  const loadingTask = pdfjs.getDocument({ ...options, data: await loadPdfBytes(file) });
+  try {
+    const pdf = await loadingTask.promise;
+    return await process(pdf, pdfjs);
+  } finally {
+    await loadingTask.destroy();
+  }
 }
 
 export async function renderPageToCanvas(pdfDoc, pageNum, scale = 1.5) {
@@ -170,9 +181,7 @@ export async function rasterizePdfWithRedactions(file, regions, onProgress) {
 }
 
 export async function extractText(file, onProgress) {
-  const pdfjsLib = await getPdfjsLib();
-  const bytes = await loadPdfBytes(file);
-  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  return withPdfDocument(file, async (pdf, pdfjsLib) => {
   let text = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
@@ -193,12 +202,11 @@ export async function extractText(file, onProgress) {
     if (onProgress) onProgress(Math.round((i / pdf.numPages) * 100));
   }
   return text;
+  });
 }
 
 export async function extractLayout(file, onProgress) {
-  const pdfjsLib = await getPdfjsLib();
-  const bytes = await loadPdfBytes(file);
-  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  return withPdfDocument(file, async (pdf, pdfjsLib) => {
   const pages = [];
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
     const page = await pdf.getPage(pageNumber);
@@ -219,21 +227,18 @@ export async function extractLayout(file, onProgress) {
     if (onProgress) onProgress(Math.round((pageNumber / pdf.numPages) * 100));
   }
   return pages;
+  });
 }
 
 export async function getPageCount(file) {
-  const pdfjsLib = await getPdfjsLib();
-  const bytes = await loadPdfBytes(file);
-  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
-  return pdf.numPages;
+  return withPdfDocument(file, (pdf) => pdf.numPages);
 }
 
 export async function getPdfMetadata(file) {
-  const pdfjsLib = await getPdfjsLib();
-  const bytes = await loadPdfBytes(file);
-  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
-  const meta = await pdf.getMetadata();
-  return { numPages: pdf.numPages, info: meta.info, metadata: meta.metadata };
+  return withPdfDocument(file, async (pdf) => {
+    const meta = await pdf.getMetadata();
+    return { numPages: pdf.numPages, info: meta.info, metadata: meta.metadata };
+  });
 }
 
 export async function addWatermarkToPdf(file, text, options = {}) {
@@ -243,6 +248,7 @@ export async function addWatermarkToPdf(file, text, options = {}) {
     fontSize = 48,
     rotation = 45,
     color = { r: 0.5, g: 0.5, b: 0.5 },
+    pageRange = '',
   } = options;
 
   const bytes = await loadPdfBytes(file);
@@ -250,7 +256,10 @@ export async function addWatermarkToPdf(file, text, options = {}) {
   const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const pages = pdfDoc.getPages();
 
-  for (const page of pages) {
+  const selected = pageRange ? new Set(parsePageRanges(pageRange, pages.length)) : null;
+  for (let index = 0; index < pages.length; index++) {
+    if (selected && !selected.has(index + 1)) continue;
+    const page = pages[index];
     const { width, height } = page.getSize();
     page.drawText(text, {
       x: width / 2 - (text.length * fontSize * 0.3),
@@ -268,17 +277,22 @@ export async function addWatermarkToPdf(file, text, options = {}) {
 
 export async function addPageNumbers(file, options = {}) {
   const { PDFDocument, StandardFonts, rgb } = await getPdfLib();
-  const { position = 'bottom-center', startAt = 1, fontSize = 10, prefix = '', suffix = '' } = options;
+  const { position = 'bottom-center', startAt = 1, fontSize = 10, prefix = '', suffix = '', pageRange = '' } = options;
 
   const bytes = await loadPdfBytes(file);
   const pdfDoc = await PDFDocument.load(bytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
 
+  const selected = pageRange ? new Set(parsePageRanges(pageRange, pages.length)) : null;
+  let sequence = 0;
   for (let i = 0; i < pages.length; i++) {
+    if (selected && !selected.has(i + 1)) continue;
     const page = pages[i];
     const { width, height } = page.getSize();
-    const num = `${prefix}${i + startAt}${suffix}`;
+    const number = startAt + sequence;
+    const num = `${prefix}${number}${suffix}`.replaceAll('{page}', String(number)).replaceAll('{total}', String(selected?.size || pages.length));
+    sequence += 1;
     let x = width / 2 - 20;
     let y = 20;
     if (position === 'top-center') y = height - 30;

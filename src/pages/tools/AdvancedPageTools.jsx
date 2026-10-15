@@ -38,9 +38,35 @@ export function SplitByBookmarks() {
 }
 
 export function SplitInHalf() {
-  const [files, setFiles] = useState([]); const { busy, progress, run } = useProcess()
-  const process = () => run(async () => { const { PDFDocument } = await getPdfLib(); const source = await PDFDocument.load(await loadPdfBytes(files[0])); const count = source.getPageCount(); if (count < 2) throw new Error('The PDF needs at least two pages.'); const midpoint = Math.ceil(count / 2); const blobs = await splitPdfByRanges(files[0], [Array.from({ length: midpoint }, (_, i) => i + 1), Array.from({ length: count - midpoint }, (_, i) => midpoint + i + 1)]); downloadBlob(await createZipFromBlobs(blobs.map((blob, index) => ({ blob, name: `half-${index + 1}.pdf` }))), 'pdf-halves.zip') })
-  return <ToolPage toolId="split-in-half"><PdfInput files={files} setFiles={setFiles} /><Action busy={busy} progress={progress} disabled={!files[0]} onClick={process} icon={Scissors} label="Split document in half" /></ToolPage>
+  const [files, setFiles] = useState([]); const [mode, setMode] = useState('pages'); const { busy, progress, run } = useProcess()
+  const process = () => run(async (setProgress) => {
+    const { PDFDocument } = await getPdfLib()
+    const bytes = await loadPdfBytes(files[0])
+    const source = await PDFDocument.load(bytes)
+    const count = source.getPageCount()
+    if (mode === 'pages') {
+      if (count < 2) throw new Error('The PDF needs at least two pages to split the document.')
+      const midpoint = Math.ceil(count / 2)
+      const blobs = await splitPdfByRanges(files[0], [Array.from({ length: midpoint }, (_, index) => index + 1), Array.from({ length: count - midpoint }, (_, index) => midpoint + index + 1)])
+      downloadBlob(await createZipFromBlobs(blobs.map((blob, index) => ({ blob, name: `document-half-${index + 1}.pdf` }))), 'pdf-halves.zip')
+      return
+    }
+    const names = mode === 'vertical' ? ['left', 'right'] : ['top', 'bottom']
+    const outputs = []
+    for (let half = 0; half < 2; half++) {
+      const output = await PDFDocument.create()
+      const embedded = await output.embedPdf(bytes, source.getPageIndices())
+      embedded.forEach((original, index) => {
+        const vertical = mode === 'vertical'
+        const page = output.addPage([vertical ? original.width / 2 : original.width, vertical ? original.height : original.height / 2])
+        page.drawPage(original, { x: vertical && half === 1 ? -original.width / 2 : 0, y: !vertical && half === 0 ? -original.height / 2 : 0, width: original.width, height: original.height })
+        setProgress(15 + (half * count + index + 1) / (count * 2) * 75)
+      })
+      outputs.push({ name: `${names[half]}-half.pdf`, blob: new Blob([await output.save()], { type: 'application/pdf' }) })
+    }
+    downloadBlob(await createZipFromBlobs(outputs), `page-${mode}-halves.zip`)
+  })
+  return <ToolPage toolId="split-in-half"><PdfInput files={files} setFiles={setFiles} /><div className="tool-panel"><FormGroup label="Split layout"><select className="form-select" value={mode} onChange={(event) => setMode(event.target.value)}><option value="pages">Split document into two page groups</option><option value="vertical">Split every page into left and right halves</option><option value="horizontal">Split every page into top and bottom halves</option></select></FormGroup><p className="form-hint">Each page-half output retains the original page order. The two PDFs are downloaded as a ZIP.</p></div><Action busy={busy} progress={progress} disabled={!files[0]} onClick={process} icon={Scissors} label="Download two halves" /></ToolPage>
 }
 
 export function SplitBySize() {

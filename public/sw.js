@@ -1,45 +1,32 @@
-const CACHE_NAME = 'createpdf-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/manifest.json',
-];
+const CACHE_NAME = `createpdf-${self.__CREATEPDF_VERSION || 'development'}`
+const STATIC_ASSETS = self.__CREATEPDF_PRECACHE || ['/', '/manifest.json', '/favicon.svg']
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
-  self.skipWaiting();
-});
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)))
+  self.skipWaiting()
+})
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))))
+  self.clients.claim()
+})
 
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
+  const { request } = event
+  const url = new URL(request.url)
+  if (request.method !== 'GET' || url.origin !== location.origin || url.pathname === '/health' || url.pathname === '/signal') return
 
-  // Never cache document file contents - only app shell
-  if (request.method !== 'GET') return;
-  if (url.origin !== location.origin) return;
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).catch(async () => (await caches.open(CACHE_NAME)).match('/')))
+    return
+  }
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const networkFetch = fetch(request)
-        .then((response) => {
-          if (response.ok && response.type === 'basic') {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
-  );
-});
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME)
+    const cached = await cache.match(request)
+    if (cached) return cached
+    const response = await fetch(request)
+    if (response.ok && response.type === 'basic') await cache.put(request, response.clone())
+    return response
+  })())
+})

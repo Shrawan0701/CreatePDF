@@ -119,15 +119,24 @@ export function PrivacyScanner() {
   const handleScan = async () => {
     if (!files[0]) return;
     await run(async (setProgress) => {
-          const { getPdfjsLib, loadPdfBytes } = await import('../../services/pdfEngine');
       const pdfjsLib = await getPdfjsLib();
       const bytes = await loadPdfBytes(files[0]);
       const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
-      setProgress(20);
-      const meta = await pdf.getMetadata();
-      setProgress(40);
+      const [meta, attachments, actions, fields, openAction] = await Promise.all([
+        pdf.getMetadata(), pdf.getAttachments(), pdf.getJSActions(), pdf.getFieldObjects(), pdf.getOpenAction(),
+      ]);
+      setProgress(25);
       const text = await extractText(files[0], null);
-      setProgress(70);
+      const links = new Set();
+      let annotationCount = 0;
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber);
+        for (const annotation of await page.getAnnotations()) {
+          annotationCount += 1;
+          if (annotation.url || annotation.unsafeUrl) links.add(annotation.url || annotation.unsafeUrl);
+        }
+        setProgress(25 + Math.round(pageNumber / pdf.numPages * 60));
+      }
 
       const emailRegex = /[\w.-]+@[\w.-]+\.\w{2,}/g;
       const phoneRegex = /(\+?\d[\d\s\-().]{7,}\d)/g;
@@ -137,10 +146,16 @@ export function PrivacyScanner() {
       const risks = [];
       if (meta.info?.Author) risks.push({ level: 'medium', label: 'Author name in metadata', value: meta.info.Author });
       if (meta.info?.Creator) risks.push({ level: 'low', label: 'Creator software in metadata', value: meta.info.Creator });
+      if (meta.metadata) risks.push({ level: 'low', label: 'Embedded XMP metadata', value: 'Additional metadata may contain personal information.' });
       if (emails.length) risks.push({ level: 'high', label: `${emails.length} email address${emails.length > 1 ? 'es' : ''} found`, value: emails.slice(0, 5).join(', ') });
       if (phones.length) risks.push({ level: 'medium', label: `${phones.length} possible phone number${phones.length > 1 ? 's' : ''} found`, value: phones.slice(0, 5).join(', ') });
+      if (attachments?.size) risks.push({ level: 'high', label: `${attachments.size} embedded attachment${attachments.size === 1 ? '' : 's'}`, value: [...attachments.keys()].slice(0, 5).join(', ') });
+      if (actions?.size) risks.push({ level: 'high', label: 'Embedded JavaScript actions', value: `${actions.size} action group${actions.size === 1 ? '' : 's'}` });
+      if (openAction?.size) risks.push({ level: 'medium', label: 'Document open action', value: 'The PDF may trigger an action when opened.' });
+      if (fields?.size) risks.push({ level: 'medium', label: `${fields.size} form field${fields.size === 1 ? '' : 's'}`, value: 'Fields may retain entered values.' });
+      if (links.size) risks.push({ level: 'medium', label: `${links.size} external link${links.size === 1 ? '' : 's'}`, value: [...links].slice(0, 5).join(', ') });
 
-      setReport({ meta: meta.info, risks, numPages: pdf.numPages, textLength: text.length });
+      setReport({ meta: meta.info, risks, numPages: pdf.numPages, textLength: text.length, annotationCount });
       setProgress(100);
       showToast('Scan complete!', 'success');
     });
@@ -166,6 +181,7 @@ export function PrivacyScanner() {
             {[
               { label: 'Pages', value: report.numPages },
               { label: 'Text chars', value: report.textLength.toLocaleString() },
+              { label: 'Annotations', value: report.annotationCount },
               { label: 'Risks found', value: report.risks.length },
             ].map((s) => (
               <div key={s.label} style={{ background: 'var(--bg-surface-2)', borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
@@ -175,7 +191,7 @@ export function PrivacyScanner() {
             ))}
           </div>
           {report.risks.length === 0 ? (
-            <div style={{ textAlign: 'center', color: 'var(--success)', padding: '20px', fontWeight: 600 }}>✓ No significant privacy risks detected in metadata or text patterns.</div>
+            <div style={{ textAlign: 'center', color: 'var(--success)', padding: '20px', fontWeight: 600 }}>No risks detected by these checks. Scanned images and hidden content still require manual review.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {report.risks.map((r, i) => (

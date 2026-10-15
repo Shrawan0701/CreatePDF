@@ -17,11 +17,47 @@ export function FillForm() {
 }
 
 export function Thumbmark() {
-  const { showToast } = useApp(); const canvasRef = useRef(null); const [file, setFile] = useState(null); const [threshold, setThreshold] = useState(170); const [ink, setInk] = useState('#1f2937')
-  useEffect(() => { if (!file) return; const image = new Image(); image.onload = () => { const canvas = canvasRef.current; const max = 700; const scale = Math.min(1, max / Math.max(image.width, image.height)); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height); URL.revokeObjectURL(image.src) }; image.src = URL.createObjectURL(file) }, [file])
-  const process = () => { const canvas = canvasRef.current; const context = canvas.getContext('2d'); const data = context.getImageData(0, 0, canvas.width, canvas.height); const color = [parseInt(ink.slice(1, 3), 16), parseInt(ink.slice(3, 5), 16), parseInt(ink.slice(5, 7), 16)]; for (let index = 0; index < data.data.length; index += 4) { const luminance = .299 * data.data[index] + .587 * data.data[index + 1] + .114 * data.data[index + 2]; const alpha = Math.max(0, Math.min(255, threshold - luminance + 80)); data.data[index] = color[0]; data.data[index + 1] = color[1]; data.data[index + 2] = color[2]; data.data[index + 3] = alpha } context.putImageData(data, 0, 0); showToast('Thumbmark enhanced. This is not biometric verification.', 'success') }
-  const save = () => canvasRef.current.toBlob((blob) => blob && downloadBlob(blob, 'thumbmark.png'), 'image/png')
-  return <ToolPage toolId="thumbmark"><div className="tool-panel"><DropZone accept={['image/*']} onFiles={([image]) => setFile(image)}><Fingerprint size={32} /><div className="drop-zone-title">Photograph or import a thumbprint</div><div className="drop-zone-sub">Creates a transparent visual asset; it does not verify identity.</div></DropZone></div>{file && <><div className="tool-panel form-grid"><FormGroup label="Background threshold"><input type="range" min="80" max="240" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} /></FormGroup><FormGroup label="Ink colour"><input className="form-input" type="color" value={ink} onChange={(event) => setInk(event.target.value)} /></FormGroup></div><div className="tool-panel thumbmark-stage"><canvas ref={canvasRef} /></div><div className="action-row"><button className="btn btn-secondary" onClick={process}><Fingerprint size={16} /> Enhance</button><button className="btn btn-primary" onClick={save}><Download size={16} /> Transparent PNG</button></div></>}</ToolPage>
+  const { showToast } = useApp()
+  const canvasRef = useRef(null)
+  const [file, setFile] = useState(null)
+  const [sourceImage, setSourceImage] = useState(null)
+  const [crop, setCrop] = useState({ left: 0, top: 0, right: 0, bottom: 0 })
+  const [threshold, setThreshold] = useState(170)
+  const [ink, setInk] = useState('#1f2937')
+  useEffect(() => {
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => setSourceImage(image)
+    image.onerror = () => showToast('Could not read the thumbprint image.', 'error')
+    image.src = url
+    return () => URL.revokeObjectURL(url)
+  }, [file, showToast])
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !sourceImage) return
+    const x = Math.round(sourceImage.width * crop.left / 100)
+    const y = Math.round(sourceImage.height * crop.top / 100)
+    const sourceWidth = Math.max(1, sourceImage.width - x - Math.round(sourceImage.width * crop.right / 100))
+    const sourceHeight = Math.max(1, sourceImage.height - y - Math.round(sourceImage.height * crop.bottom / 100))
+    const scale = Math.min(1, 700 / Math.max(sourceWidth, sourceHeight))
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale))
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale))
+    const context = canvas.getContext('2d')
+    context.drawImage(sourceImage, x, y, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
+    const data = context.getImageData(0, 0, canvas.width, canvas.height)
+    const color = [parseInt(ink.slice(1, 3), 16), parseInt(ink.slice(3, 5), 16), parseInt(ink.slice(5, 7), 16)]
+    for (let index = 0; index < data.data.length; index += 4) {
+      const luminance = .299 * data.data[index] + .587 * data.data[index + 1] + .114 * data.data[index + 2]
+      data.data[index] = color[0]
+      data.data[index + 1] = color[1]
+      data.data[index + 2] = color[2]
+      data.data[index + 3] = Math.max(0, Math.min(255, threshold - luminance + 80))
+    }
+    context.putImageData(data, 0, 0)
+  }, [sourceImage, crop, threshold, ink])
+  const save = () => canvasRef.current?.toBlob((blob) => blob && downloadBlob(blob, 'thumbmark.png'), 'image/png')
+  return <ToolPage toolId="thumbmark"><div className="tool-panel"><DropZone accept={['image/*']} onFiles={([image]) => { setFile(image); setSourceImage(null) }}><Fingerprint size={32} /><div className="drop-zone-title">Photograph or import a thumbprint</div><div className="drop-zone-sub">Creates a transparent visual asset; it does not verify identity.</div></DropZone></div>{file && <><div className="tool-panel form-grid"><FormGroup label="Background threshold"><input type="range" min="80" max="240" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} /></FormGroup><FormGroup label="Ink colour"><input className="form-input" type="color" value={ink} onChange={(event) => setInk(event.target.value)} /></FormGroup>{Object.keys(crop).map((edge) => <FormGroup key={edge} label={`Crop ${edge}`}><input type="range" min="0" max="45" value={crop[edge]} onChange={(event) => setCrop((current) => ({ ...current, [edge]: Number(event.target.value) }))} /></FormGroup>)}</div><div className="tool-panel thumbmark-stage"><canvas ref={canvasRef} /></div><button className="btn btn-primary" disabled={!sourceImage} onClick={save}><Download size={16} /> Transparent PNG</button></>}</ToolPage>
 }
 
 export function RedactPdf() {
@@ -32,7 +68,51 @@ export function RedactPdf() {
 }
 
 export function InvertColors() {
-  const { showToast } = useApp(); const [file, setFile] = useState(null); const [mode, setMode] = useState('dark'); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0)
-  const convert = async () => { setBusy(true); try { const pdfjs = await getPdfjsLib(); const source = await pdfjs.getDocument({ data: await loadPdfBytes(file) }).promise; const { PDFDocument } = await getPdfLib(); const output = await PDFDocument.create(); for (let pageNumber = 1; pageNumber <= source.numPages; pageNumber++) { const canvas = await renderPageToCanvas(source, pageNumber, 1.6); const context = canvas.getContext('2d'); const image = context.getImageData(0, 0, canvas.width, canvas.height); for (let index = 0; index < image.data.length; index += 4) { const red = image.data[index], green = image.data[index + 1], blue = image.data[index + 2]; if (mode === 'dark') { image.data[index] = 255 - red; image.data[index + 1] = 255 - green; image.data[index + 2] = 255 - blue } else if (mode === 'sepia') { image.data[index] = Math.min(255, red * .393 + green * .769 + blue * .189); image.data[index + 1] = Math.min(255, red * .349 + green * .686 + blue * .168); image.data[index + 2] = Math.min(255, red * .272 + green * .534 + blue * .131) } else { const value = (.299 * red + .587 * green + .114 * blue) > 128 ? 255 : 0; image.data[index] = image.data[index + 1] = image.data[index + 2] = value } } context.putImageData(image, 0, 0); const png = await output.embedPng(await (await fetch(canvas.toDataURL('image/png'))).arrayBuffer()); const page = output.addPage([canvas.width / 1.6, canvas.height / 1.6]); page.drawImage(png, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() }); setProgress(pageNumber / source.numPages * 100) } downloadBlob(new Blob([await output.save()], { type: 'application/pdf' }), `${mode}-${file.name}`); showToast('Colour-mode PDF created.', 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId="invert-colors"><PdfPicker file={file} setFile={setFile} /><div className="tool-panel"><FormGroup label="Output mode"><select className="form-select" value={mode} onChange={(event) => setMode(event.target.value)}><option value="dark">Dark / inverted</option><option value="sepia">Sepia</option><option value="contrast">High contrast</option></select></FormGroup><p className="form-hint">Output is image-based to preserve the appearance consistently.</p></div>{busy && <ProgressBar value={progress} label="Converting pages" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={convert}><Sun size={17} /> Convert colours</button></ToolPage>
+  const { showToast } = useApp()
+  const [file, setFile] = useState(null)
+  const [mode, setMode] = useState('dark')
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const convert = async () => {
+    setBusy(true)
+    try {
+      const pdfjs = await getPdfjsLib()
+      const source = await pdfjs.getDocument({ data: await loadPdfBytes(file) }).promise
+      const { PDFDocument } = await getPdfLib()
+      const output = await PDFDocument.create()
+      for (let pageNumber = 1; pageNumber <= source.numPages; pageNumber++) {
+        const canvas = await renderPageToCanvas(source, pageNumber, 1.6)
+        const context = canvas.getContext('2d')
+        const image = context.getImageData(0, 0, canvas.width, canvas.height)
+        const samples = [[0, 0], [canvas.width - 1, 0], [0, canvas.height - 1], [canvas.width - 1, canvas.height - 1]]
+        const cornerBrightness = samples.reduce((sum, [x, y]) => {
+          const index = (y * canvas.width + x) * 4
+          return sum + .299 * image.data[index] + .587 * image.data[index + 1] + .114 * image.data[index + 2]
+        }, 0) / samples.length
+        for (let index = 0; index < image.data.length; index += 4) {
+          const red = image.data[index], green = image.data[index + 1], blue = image.data[index + 2]
+          if (mode === 'dark' || (mode === 'light' && cornerBrightness < 128)) {
+            image.data[index] = 255 - red
+            image.data[index + 1] = 255 - green
+            image.data[index + 2] = 255 - blue
+          } else if (mode === 'sepia') {
+            image.data[index] = Math.min(255, red * .393 + green * .769 + blue * .189)
+            image.data[index + 1] = Math.min(255, red * .349 + green * .686 + blue * .168)
+            image.data[index + 2] = Math.min(255, red * .272 + green * .534 + blue * .131)
+          } else if (mode === 'contrast') {
+            const value = (.299 * red + .587 * green + .114 * blue) > 128 ? 255 : 0
+            image.data[index] = image.data[index + 1] = image.data[index + 2] = value
+          }
+        }
+        context.putImageData(image, 0, 0)
+        const png = await output.embedPng(await (await fetch(canvas.toDataURL('image/png'))).arrayBuffer())
+        const page = output.addPage([canvas.width / 1.6, canvas.height / 1.6])
+        page.drawImage(png, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() })
+        setProgress(pageNumber / source.numPages * 100)
+      }
+      downloadBlob(new Blob([await output.save()], { type: 'application/pdf' }), `${mode}-${file.name}`)
+      showToast('Colour-mode PDF created.', 'success')
+    } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
+  }
+  return <ToolPage toolId="invert-colors"><PdfPicker file={file} setFile={setFile} /><div className="tool-panel"><FormGroup label="Output mode"><select className="form-select" value={mode} onChange={(event) => setMode(event.target.value)}><option value="dark">Dark / inverted</option><option value="light">Light</option><option value="sepia">Sepia</option><option value="contrast">High contrast</option></select></FormGroup><p className="form-hint">Output is image-based to preserve the appearance consistently.</p></div>{busy && <ProgressBar value={progress} label="Converting pages" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={convert}><Sun size={17} /> Convert colours</button></ToolPage>
 }

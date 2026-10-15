@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { cloneElement, isValidElement, useState, useRef, useCallback, useId } from 'react';
 import { CheckCircle, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 
 // ===========================
@@ -189,10 +189,13 @@ export function Tabs({ tabs, active, onChange }) {
 // FormGroup
 // ===========================
 export function FormGroup({ label, children, hint }) {
+  const generatedId = useId();
+  const isField = isValidElement(children) && ['input', 'select', 'textarea'].includes(children.type);
+  const fieldId = isField ? children.props.id || generatedId : undefined;
   return (
     <div className="form-group">
-      {label && <label className="form-label">{label}</label>}
-      {children}
+      {label && <label className="form-label" htmlFor={fieldId}>{label}</label>}
+      {isField ? cloneElement(children, { id: fieldId }) : children}
       {hint && <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{hint}</span>}
     </div>
   );

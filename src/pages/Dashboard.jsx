@@ -5,6 +5,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { TOOLS, TOOL_CATEGORIES } from '../data/tools';
 import { RecentFilesPanel } from '../components/Layout';
+import SavedDocumentsPanel from '../components/SavedDocumentsPanel';
 
 const QUICK_TOOLS = [
   'edit-pdf', 'sign-pdf', 'merge-pdf', 'compress-pdf',
@@ -46,7 +47,7 @@ export default function Dashboard() {
       {/* Stats */}
       <div className="stats-row">
         {[
-          { icon: Zap, label: '60+ PDF Tools' },
+          { icon: Zap, label: '59 PDF Tools' },
           { icon: Shield, label: 'Privacy First' },
           { icon: Download, label: 'No Signup' },
           { icon: Star, label: '100% Free' },
@@ -60,6 +61,7 @@ export default function Dashboard() {
 
       {/* Recent Files */}
       <RecentFilesPanel />
+      <SavedDocumentsPanel />
 
       {/* Starred Tools */}
       {starredList.length > 0 && (
@@ -102,7 +104,7 @@ export default function Dashboard() {
           <h2 className="section-title" style={{ fontSize: 'var(--font-size-lg)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Receipt size={18} color="var(--accent)" /> Business Tools
           </h2>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>India GST compliant</span>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Review tax details before issuing</span>
         </div>
         <div className="tools-grid-lg" style={{ marginTop: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
           {TOOLS.filter((t) => t.category === TOOL_CATEGORIES.BUSINESS).map((tool) => (

@@ -200,7 +200,7 @@ export function Topbar({ breadcrumbs = [] }) {
 
   return (
     <header className="topbar">
-      <button className="topbar-toggle" onClick={() => {
+      <button className="topbar-toggle" aria-label="Open navigation" onClick={() => {
         const isMobile = window.innerWidth < 769;
         if (isMobile) setMobileSidebarOpen((v) => !v);
         else toggleSidebar();
@@ -209,10 +209,10 @@ export function Topbar({ breadcrumbs = [] }) {
       </button>
 
       {breadcrumbs.length > 0 && (
-        <nav className="topbar-breadcrumb">
+        <nav className="topbar-breadcrumb" aria-label="Breadcrumb">
           <Link to="/" className="crumb" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Home</Link>
           {breadcrumbs.map((crumb, i) => (
-            <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span key={i} className="breadcrumb-segment">
               <span className="sep">/</span>
               <span className="crumb">{crumb}</span>
             </span>

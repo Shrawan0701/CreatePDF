@@ -1,4 +1,3 @@
-// Generic stub tool for tools that share a common upload-process-download pattern
 import { useState } from 'react';
 import { FileText, Trash2, Download } from 'lucide-react';
 import { ToolPage, useToolState } from '../../components/ToolPage';
@@ -15,6 +14,7 @@ export function AddWatermark() {
   const [fontSize, setFontSize] = useState(48);
   const [rotation, setRotation] = useState(45);
   const [color, setColor] = useState('#808080');
+  const [pageRange, setPageRange] = useState('');
 
   const handleApply = async () => {
     if (!files[0]) return;
@@ -26,7 +26,7 @@ export function AddWatermark() {
         const b = parseInt(hex.slice(5, 7), 16) / 255;
         return { r, g, b };
       };
-      const blob = await addWatermarkToPdf(files[0], text, { opacity, fontSize, rotation, color: hexToRgb(color) });
+      const blob = await addWatermarkToPdf(files[0], text, { opacity, fontSize, rotation, color: hexToRgb(color), pageRange });
       setProgress(90);
       downloadBlob(blob, `watermarked-${files[0].name}`);
       showToast('Watermark applied!', 'success');
@@ -51,6 +51,7 @@ export function AddWatermark() {
           <FormGroup label="Opacity (0–1)"><input className="form-input" type="number" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(+e.target.value)} /></FormGroup>
           <FormGroup label="Rotation (degrees)"><input className="form-input" type="number" value={rotation} onChange={(e) => setRotation(+e.target.value)} /></FormGroup>
           <FormGroup label="Color"><input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ height: 36, cursor: 'pointer', border: '1px solid var(--border)', borderRadius: 6, padding: 2 }} /></FormGroup>
+          <FormGroup label="Pages" hint="Leave blank for all pages"><input className="form-input" value={pageRange} onChange={(event) => setPageRange(event.target.value)} placeholder="1-3, 6, 9-12" /></FormGroup>
         </div>
       </div>
       {error && <div style={{ color: 'var(--danger)', padding: '10px', background: 'var(--danger-light)', borderRadius: 8, marginBottom: 12, fontSize: 'var(--font-size-sm)' }}>{error}</div>}
@@ -72,12 +73,13 @@ export function PageNumbers() {
   const [prefix, setPrefix] = useState('');
   const [suffix, setSuffix] = useState('');
   const [fontSize, setFontSize] = useState(10);
+  const [pageRange, setPageRange] = useState('');
 
   const handleApply = async () => {
     if (!files[0]) return;
     await run(async (setProgress) => {
       setProgress(30);
-      const blob = await addPageNumbers(files[0], { position, startAt, prefix, suffix, fontSize });
+      const blob = await addPageNumbers(files[0], { position, startAt, prefix, suffix, fontSize, pageRange });
       setProgress(90);
       downloadBlob(blob, `numbered-${files[0].name}`);
       showToast('Page numbers added!', 'success');
@@ -109,6 +111,7 @@ export function PageNumbers() {
           <FormGroup label="Prefix"><input className="form-input" value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="Page " /></FormGroup>
           <FormGroup label="Suffix"><input className="form-input" value={suffix} onChange={(e) => setSuffix(e.target.value)} placeholder=" of N" /></FormGroup>
           <FormGroup label="Font size"><input className="form-input" type="number" min={6} max={24} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} /></FormGroup>
+          <FormGroup label="Pages" hint="Leave blank for all pages"><input className="form-input" value={pageRange} onChange={(event) => setPageRange(event.target.value)} placeholder="1-3, 6, 9-12" /></FormGroup>
         </div>
       </div>
       {error && <div style={{ color: 'var(--danger)', padding: 10, background: 'var(--danger-light)', borderRadius: 8, marginBottom: 12, fontSize: 'var(--font-size-sm)' }}>{error}</div>}
@@ -237,6 +240,7 @@ export function BatesNumbering() {
   const [padLength, setPadLength] = useState(6);
   const [position, setPosition] = useState('bottom-right');
   const [fontSize, setFontSize] = useState(9);
+  const [pageRange, setPageRange] = useState('');
 
   const handleApply = async () => {
     if (!files[0]) return;
@@ -246,10 +250,14 @@ export function BatesNumbering() {
       const pdfDoc = await PDFDocument.load(bytes);
       const font = await pdfDoc.embedFont(StandardFonts.Courier);
       const pages = pdfDoc.getPages();
+      const selected = pageRange ? new Set(parsePageRanges(pageRange, pages.length)) : null;
+      let sequence = 0;
       setProgress(30);
       pages.forEach((page, i) => {
+        if (selected && !selected.has(i + 1)) return;
         const { width, height } = page.getSize();
-        const num = String(startNum + i).padStart(padLength, '0');
+        const num = String(startNum + sequence).padStart(padLength, '0');
+        sequence += 1;
         const label = `${prefix}${num}`;
         let x = width - 80, y = 15;
         if (position === 'bottom-left') { x = 15; y = 15; }
@@ -288,6 +296,7 @@ export function BatesNumbering() {
             </select>
           </FormGroup>
           <FormGroup label="Font size"><input className="form-input" type="number" min={6} max={18} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} /></FormGroup>
+          <FormGroup label="Pages" hint="Leave blank for all pages"><input className="form-input" value={pageRange} onChange={(event) => setPageRange(event.target.value)} placeholder="1-3, 6, 9-12" /></FormGroup>
         </div>
         <div style={{ marginTop: 12, padding: 10, background: 'var(--bg-surface-2)', borderRadius: 6, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
           Preview: <strong>{prefix}{String(startNum).padStart(padLength, '0')}</strong>
@@ -315,6 +324,7 @@ export function HeadersFooters() {
   const [footerRight, setFooterRight] = useState('');
   const [fontSize, setFontSize] = useState(9);
   const [margin, setMargin] = useState(20);
+  const [pageRange, setPageRange] = useState('');
 
   const handleApply = async () => {
     if (!files[0]) return;
@@ -324,12 +334,15 @@ export function HeadersFooters() {
       const pdfDoc = await PDFDocument.load(bytes);
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const pages = pdfDoc.getPages();
+      const selected = pageRange ? new Set(parsePageRanges(pageRange, pages.length)) : null;
       setProgress(30);
-      pages.forEach((page) => {
+      pages.forEach((page, pageIndex) => {
+        if (selected && !selected.has(pageIndex + 1)) return;
         const { width, height } = page.getSize();
         const draw = (text, x, y) => {
           if (!text) return;
-          page.drawText(text, { x, y, size: fontSize, font, color: rgb(0.3, 0.3, 0.3) });
+          const resolved = text.replaceAll('{page}', String(pageIndex + 1)).replaceAll('{total}', String(pages.length));
+          page.drawText(resolved, { x, y, size: fontSize, font, color: rgb(0.3, 0.3, 0.3) });
         };
         // Header row
         draw(headerLeft, margin, height - margin);
@@ -369,7 +382,7 @@ export function HeadersFooters() {
           <FormGroup label="Center"><input className="form-input" value={footerCenter} onChange={(e) => setFooterCenter(e.target.value)} /></FormGroup>
           <FormGroup label="Right"><input className="form-input" value={footerRight} onChange={(e) => setFooterRight(e.target.value)} /></FormGroup>
         </div>
-        <div className="form-grid" style={{ marginTop: 16 }}><FormGroup label="Font size"><input className="form-input" type="number" min="6" max="24" value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} /></FormGroup><FormGroup label="Page margin"><input className="form-input" type="number" min="8" max="100" value={margin} onChange={(event) => setMargin(Number(event.target.value))} /></FormGroup></div>
+        <div className="form-grid" style={{ marginTop: 16 }}><FormGroup label="Font size"><input className="form-input" type="number" min="6" max="24" value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} /></FormGroup><FormGroup label="Page margin"><input className="form-input" type="number" min="8" max="100" value={margin} onChange={(event) => setMargin(Number(event.target.value))} /></FormGroup><FormGroup label="Pages" hint="Use {page} and {total} in text"><input className="form-input" value={pageRange} onChange={(event) => setPageRange(event.target.value)} placeholder="1-3, 6, 9-12" /></FormGroup></div>
       </div>
       {error && <div style={{ color: 'var(--danger)', padding: 10, background: 'var(--danger-light)', borderRadius: 8, marginBottom: 12 }}>{error}</div>}
       {processing && <ProgressBar value={progress} label="Applying…" />}

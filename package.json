@@ -6,13 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "postbuild": "node scripts/prepare-sw.mjs",
     "lint": "oxlint",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:conversion": "node scripts/conversion-smoke.mjs",
+    "smoke:exports": "node scripts/export-smoke.mjs",
+    "smoke:editor": "node scripts/editor-smoke.mjs",
     "test": "vitest run",
     "start": "node server.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/noto-sans-devanagari": "^5.3.0",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@pdfsmaller/pdf-encrypt-lite": "^1.2.0",
     "docx": "^9.11.0",
     "dompurify": "^3.4.17",
@@ -28,6 +34,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4",
+    "regenerator-runtime": "^0.14.1",
     "ws": "^8.22.0"
   },
   "devDependencies": {
