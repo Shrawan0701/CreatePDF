@@ -1,228 +1,59 @@
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Zap, Shield, Download, Star, Search, Receipt, Share2
-} from 'lucide-react';
+import { ArrowDown, ArrowUpRight, Check, FileText, Search, ShieldCheck, Star, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { TOOLS, TOOL_CATEGORIES } from '../data/tools';
+import { TOOLS, TOOL_CATEGORIES, searchTools } from '../data/tools';
 import { RecentFilesPanel } from '../components/Layout';
 import SavedDocumentsPanel from '../components/SavedDocumentsPanel';
 
-const QUICK_TOOLS = [
-  'edit-pdf', 'sign-pdf', 'merge-pdf', 'compress-pdf',
-  'split-pdf', 'pdf-to-word', 'images-to-pdf', 'scan-document',
-];
-
-const CATEGORY_ORDER = [
-  { key: TOOL_CATEGORIES.PAGE_MANAGEMENT, label: 'Page Management' },
-  { key: TOOL_CATEGORIES.EDIT_ANNOTATE, label: 'Edit & Annotate' },
-  { key: TOOL_CATEGORIES.CREATE_PDF, label: 'Create & Convert to PDF' },
-  { key: TOOL_CATEGORIES.CONVERT_FROM, label: 'Convert to Other' },
-  { key: TOOL_CATEGORIES.SECURITY, label: 'Security & Privacy' },
-];
+const POPULAR = ['merge-pdf', 'compress-pdf', 'edit-pdf', 'sign-pdf'];
+const FILTERS = ['All tools', 'Favorites', ...Object.values(TOOL_CATEGORIES)];
 
 export default function Dashboard() {
-  const { starredTools, toggleStarTool, setSearchOpen } = useApp();
-  const quickTools = QUICK_TOOLS.map((id) => TOOLS.find((t) => t.id === id)).filter(Boolean);
-  const starredList = TOOLS.filter((t) => starredTools.has(t.id));
+  const { starredTools, toggleStarTool } = useApp();
+  const [category, setCategory] = useState('All tools');
+  const [query, setQuery] = useState('');
+  const results = (query.trim() ? searchTools(query) : TOOLS).filter(tool =>
+    category === 'All tools' || (category === 'Favorites' ? starredTools.has(tool.id) : tool.category === category));
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      {/* Hero */}
-      <div className="dashboard-hero animate-fade">
-        <h2>
-          Free Online PDF Tools<br />
-          <span>Without Watermarks</span>
-        </h2>
-        <p>
-          Process documents locally in your browser. No uploads to servers,
-          no watermarks, no signup. 100% free, private and offline-capable.
-        </p>
-        <div className="dashboard-hero-search" onClick={() => setSearchOpen(true)} role="button" tabIndex={0}>
-          <Search size={18} color="rgba(255,255,255,0.7)" />
-          <span>Search PDF tools…</span>
-          <span className="kbd">Ctrl K</span>
+    <div className="workspace-home">
+      <section className="workspace-intro">
+        <div className="intro-copy">
+          <div className="eyebrow"><span className="status-dot" /> YOUR EVERYDAY DOCUMENT WORKSPACE</div>
+          <h1>Less PDF friction.<br /><span>More getting it done.</span></h1>
+          <p>Make the edit. Merge the files. Send it off.<br className="desktop-break" /> Simple tools for everything between open and done.</p>
+          <div className="intro-actions"><a href="#tools" className="btn btn-primary">Find your tool <ArrowDown size={16} /></a><Link to="/create-pdf" className="text-link">Start a blank PDF <ArrowUpRight size={15} /></Link></div>
+          <div className="intro-proof"><span><Check size={14} /> Free to use</span><span><Check size={14} /> No account</span><span><Check size={14} /> No watermarks</span></div>
         </div>
-      </div>
-
-      {/* Stats */}
-      <div className="stats-row">
-        {[
-          { icon: Zap, label: '59 PDF Tools' },
-          { icon: Shield, label: 'Privacy First' },
-          { icon: Download, label: 'No Signup' },
-          { icon: Star, label: '100% Free' },
-        ].map(({ icon: Icon, label }) => (
-          <div key={label} className="stat-badge">
-            <Icon size={15} className="stat-icon" />
-            {label}
-          </div>
-        ))}
-      </div>
-
-      {/* Recent Files */}
-      <RecentFilesPanel />
-      <SavedDocumentsPanel />
-
-      {/* Starred Tools */}
-      {starredList.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <div className="section-header">
-            <h2 className="section-title" style={{ fontSize: 'var(--font-size-lg)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Star size={18} color="var(--warning)" /> Starred Tools
-            </h2>
-          </div>
-          <div className="tools-grid" style={{ marginTop: 12 }}>
-            {starredList.map((tool) => (
-              <ToolCard key={tool.id} tool={tool} starred onStar={() => toggleStarTool(tool.id)} />
-            ))}
-          </div>
+        <div className="document-scene" aria-hidden="true">
+          <div className="scene-orbit" />
+          <div className="paper paper-back"><div className="paper-mini-logo" /><div className="paper-line" /><div className="paper-line short" /></div>
+          <div className="paper paper-front"><div className="paper-top"><span className="paper-mini-logo" /><span>DOCUMENT / 001</span></div><div className="paper-heading">Good things.<br />All together.</div><div className="paper-line" /><div className="paper-line" /><div className="paper-line short" /><div className="paper-chart"><i /><i /><i /><i /><i /><i /></div><div className="paper-bottom"><span>Made with CreatePDF</span><Check size={12} /></div></div>
+          <div className="scene-label"><span><Check size={14} /></span> Ready for what’s next.</div>
+          <div className="scene-file"><FileText size={17} /><span>your-next-big-thing.pdf</span></div>
         </div>
-      )}
-
-      {/* Quick Access */}
-      <div style={{ marginBottom: 32 }}>
-        <div className="section-header">
-          <h2 className="section-title" style={{ fontSize: 'var(--font-size-lg)' }}>
-            Quick Access
-          </h2>
-        </div>
-        <div className="tools-grid-lg" style={{ marginTop: 12 }}>
-          {quickTools.map((tool) => (
-            <ToolCard
-              key={tool.id}
-              tool={tool}
-              starred={starredTools.has(tool.id)}
-              onStar={() => toggleStarTool(tool.id)}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Business Tools */}
-      <div style={{ marginBottom: 32 }}>
-        <div className="section-header">
-          <h2 className="section-title" style={{ fontSize: 'var(--font-size-lg)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Receipt size={18} color="var(--accent)" /> Business Tools
-          </h2>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Review tax details before issuing</span>
-        </div>
-        <div className="tools-grid-lg" style={{ marginTop: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-          {TOOLS.filter((t) => t.category === TOOL_CATEGORIES.BUSINESS).map((tool) => (
-            <BusinessToolCard key={tool.id} tool={tool} />
-          ))}
-        </div>
-      </div>
-
-      {/* Tool Directory */}
-      {CATEGORY_ORDER.map(({ key, label }) => {
-        const tools = TOOLS.filter((t) => t.category === key);
-        return (
-          <div key={key} style={{ marginBottom: 32 }}>
-            <div className="section-header">
-              <h2 className="section-title" style={{ fontSize: 'var(--font-size-lg)' }}>{label}</h2>
-            </div>
-            <div className="tools-grid" style={{ marginTop: 12 }}>
-              {tools.map((tool) => (
-                <ToolCard
-                  key={tool.id}
-                  tool={tool}
-                  starred={starredTools.has(tool.id)}
-                  onStar={() => toggleStarTool(tool.id)}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Collaborate */}
-      <div style={{ marginBottom: 32 }}>
-        <div className="section-header">
-          <h2 className="section-title" style={{ fontSize: 'var(--font-size-lg)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Share2 size={18} color="#14b8a6" /> Collaborate & Share
-          </h2>
-        </div>
-        <div className="tools-grid" style={{ marginTop: 12 }}>
-          {TOOLS.filter((t) => t.category === TOOL_CATEGORIES.COLLABORATE).map((tool) => (
-            <ToolCard
-              key={tool.id}
-              tool={tool}
-              starred={starredTools.has(tool.id)}
-              onStar={() => toggleStarTool(tool.id)}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Scan & Workflow */}
-      <div style={{ marginBottom: 48 }}>
-        <div className="section-header">
-          <h2 className="section-title" style={{ fontSize: 'var(--font-size-lg)' }}>Scan & Workflow</h2>
-        </div>
-        <div className="tools-grid" style={{ marginTop: 12 }}>
-          {TOOLS.filter((t) => t.category === TOOL_CATEGORIES.SCAN_WORKFLOW).map((tool) => (
-            <ToolCard
-              key={tool.id}
-              tool={tool}
-              starred={starredTools.has(tool.id)}
-              onStar={() => toggleStarTool(tool.id)}
-            />
-          ))}
-        </div>
-      </div>
+      </section>
+      <section className="popular-section" aria-labelledby="popular-title">
+        <div className="section-heading"><h2 id="popular-title">A good place to start</h2><span>The everyday essentials</span></div>
+        <div className="essential-grid">{POPULAR.map((id, i) => {
+          const tool = TOOLS.find(t => t.id === id); const Icon = tool.icon;
+          return <Link key={id} to={tool.route} className="essential-card"><div className="essential-top"><span className={`essential-icon tone-${i}`}><Icon size={22} strokeWidth={1.6} /></span><ArrowUpRight className="essential-arrow" size={18} /></div><h3>{tool.name}</h3><p>{tool.description}</p></Link>;
+        })}</div>
+      </section>
+      <div className="local-promise"><div className="promise-icon"><ShieldCheck size={21} /></div><div><strong>Your files. Your device. Your business.</strong><p>Document processing happens in your browser. Your files stay with you.</p></div><span className="local-label"><span className="status-dot" /> LOCAL BY DEFAULT</span></div>
+      <section id="tools" className="tool-library" aria-labelledby="library-title">
+        <div className="library-heading"><div><div className="eyebrow">THE TOOLKIT</div><h2 id="library-title">Small tools. Big possibilities.</h2><p>Everything you need, without the extra steps.</p></div><label className="library-search"><Search size={17} /><input aria-label="Filter tools" placeholder="What do you need to do?" value={query} onChange={e => setQuery(e.target.value)} />{query && <button className="icon-btn" aria-label="Clear search" onClick={() => setQuery('')}><X size={14} /></button>}</label></div>
+        <div className="library-filters" role="group" aria-label="Tool categories">{FILTERS.map(filter => <button key={filter} aria-pressed={category === filter} className={category === filter ? 'selected' : ''} onClick={() => setCategory(filter)}>{filter === 'Favorites' && <Star size={13} />}{filter}{filter === 'All tools' && <span>{TOOLS.length}</span>}</button>)}</div>
+        <div className="library-result-count" aria-live="polite">{results.length} {results.length === 1 ? 'tool' : 'tools'}{category !== 'All tools' ? ` · ${category}` : ' at your fingertips'}</div>
+        <div className="directory-grid">{results.map(tool => {
+          const Icon = tool.icon; const starred = starredTools.has(tool.id);
+          return <article className="directory-item" key={tool.id}><Link to={tool.route}><span className="directory-icon"><Icon size={20} strokeWidth={1.6} /></span><div><h3>{tool.name}</h3><p>{tool.description}</p></div></Link><button className={`directory-star ${starred ? 'is-starred' : ''}`} aria-label={`${starred ? 'Remove' : 'Add'} ${tool.name} ${starred ? 'from' : 'to'} favorites`} aria-pressed={starred} onClick={() => toggleStarTool(tool.id)}><Star size={15} fill={starred ? 'currentColor' : 'none'} /></button></article>;
+        })}</div>
+        {!results.length && <div className="library-empty"><Search size={26} /><h3>{category === 'Favorites' && !query ? 'Keep your go-to tools close.' : 'No matching tools'}</h3><p>{category === 'Favorites' && !query ? 'Select the star beside any tool to save it here.' : 'Try another search or choose a different category.'}</p><button className="btn btn-secondary" onClick={() => { setQuery(''); setCategory('All tools'); }}>View all tools</button></div>}
+      </section>
+      <section id="documents" className="documents-section"><div className="eyebrow">PICK UP WHERE YOU LEFT OFF</div><SavedDocumentsPanel /><RecentFilesPanel /></section>
+      <footer className="workspace-footer"><Link to="/" className="footer-wordmark">createpdf<span>.si</span></Link><p>A little less busywork. A little more possibility.</p><Link to="/settings">Preferences <ArrowUpRight size={13} /></Link></footer>
     </div>
-  );
-}
-
-function ToolCard({ tool, starred, onStar }) {
-  const Icon = tool.icon;
-  return (
-    <Link to={tool.route} className={`tool-card ${starred ? 'starred' : ''}`}>
-      <div className={`tool-card-icon cat-${tool.catKey}`}>
-        {Icon && <Icon size={22} />}
-      </div>
-      <div className="tool-card-name">{tool.name}</div>
-      <div className="tool-card-desc">{tool.description}</div>
-      <button
-        className="tool-card-star"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStar(); }}
-        title={starred ? 'Remove from starred' : 'Star this tool'}
-      >
-        <Star size={14} fill={starred ? 'currentColor' : 'none'} />
-      </button>
-    </Link>
-  );
-}
-
-function BusinessToolCard({ tool }) {
-  const Icon = tool.icon;
-  return (
-    <Link to={tool.route} style={{ textDecoration: 'none' }}>
-      <div style={{
-        background: 'linear-gradient(135deg, var(--bg-surface) 0%, rgba(236,72,153,0.05) 100%)',
-        border: '1px solid rgba(236,72,153,0.2)',
-        borderRadius: 'var(--border-radius-lg)',
-        padding: '20px',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 16,
-        transition: 'all var(--transition)',
-        cursor: 'pointer',
-      }}
-        className="tool-card"
-      >
-        <div style={{
-          width: 52, height: 52, borderRadius: 'var(--border-radius)',
-          background: 'rgba(236,72,153,0.12)', color: '#ec4899',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-        }}>
-          {Icon && <Icon size={26} />}
-        </div>
-        <div>
-          <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{tool.name}</div>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>{tool.description}</div>
-        </div>
-      </div>
-    </Link>
   );
 }

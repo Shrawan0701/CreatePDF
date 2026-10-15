@@ -44,6 +44,15 @@ export function DropZone({ onFiles, accept = [], multiple = false, capture, chil
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label="Choose or drop files"
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
       className={`drop-zone ${dragging ? 'drag-over' : ''} ${className}`}
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}

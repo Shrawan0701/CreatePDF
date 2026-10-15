@@ -39,7 +39,7 @@ export default function EditPdf() {
   const [selectedId, setSelectedId] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [activeTool, setActiveTool] = useState('select')
-  const [config] = useState({ fontSize: 18, color: '#111827', fill: '#6c63ff' })
+  const [config] = useState({ fontSize: 18, color: '#111827', fill: '#0d7865' })
   const [history, setHistory] = useState([])
   const [future, setFuture] = useState([])
   const [processing, setProcessing] = useState(false)

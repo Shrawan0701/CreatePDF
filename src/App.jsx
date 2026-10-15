@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { Database, Download, FileArchive, HardDrive, Pencil, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { AppProvider, useApp } from './context/AppContext'
-import { Sidebar, Topbar, SearchModal } from './components/Layout'
+import { Topbar, SearchModal } from './components/Layout'
 import { ToastContainer } from './components/ui'
 import Dashboard from './pages/Dashboard'
 import { TOOLS } from './data/tools'
@@ -101,14 +101,21 @@ export const IMPLEMENTED_TOOLS = {
 }
 
 function AppShell() {
-  const { sidebarCollapsed, isOnline, toasts, dismissToast } = useApp()
+  const { isOnline, toasts, dismissToast } = useApp()
   const location = useLocation()
   const currentTool = useMemo(() => TOOLS.find((tool) => tool.route === location.pathname), [location.pathname])
 
+  useEffect(() => {
+    if (location.hash) {
+      const frame = requestAnimationFrame(() => document.getElementById(location.hash.slice(1))?.scrollIntoView());
+      return () => cancelAnimationFrame(frame);
+    }
+    window.scrollTo(0, 0);
+  }, [location.pathname, location.hash]);
+
   return (
     <div className="app-shell">
-      <Sidebar />
-      <main className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <main className="main-content">
         <Topbar breadcrumbs={currentTool ? [currentTool.category, currentTool.name] : location.pathname === '/settings' ? ['Settings'] : []} />
         {!isOnline && <div className="offline-banner">You are offline. Local PDF tools remain available.</div>}
         <div className="page-content">

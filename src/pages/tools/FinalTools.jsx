@@ -9,7 +9,7 @@ import { getResumes, saveResume } from '../../services/storage'
 const emptyResume = () => ({ id: generateId(), name: '', title: '', email: '', phone: '', summary: '', experience: '', education: '', skills: '', projects: '', template: 'modern' })
 const escapeResumeText = (value) => String(value || '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
 const resumeTemplates = {
-  modern: { label: 'Modern', fontFamily: 'sans-serif', headingColor: '#4338ca', margin: 46, fontSize: 11, lineHeight: 1.35 },
+  modern: { label: 'Modern', fontFamily: 'sans-serif', headingColor: '#0d7865', margin: 46, fontSize: 11, lineHeight: 1.35 },
   classic: { label: 'Classic', fontFamily: 'serif', headingColor: '#202938', margin: 50, fontSize: 11, lineHeight: 1.4 },
   compact: { label: 'Compact', fontFamily: 'sans-serif', headingColor: '#155e75', margin: 36, fontSize: 10, lineHeight: 1.2 },
 }
