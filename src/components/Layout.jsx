@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Search, Star, Sun, Moon, Download, Settings, Clock, Trash2, X, Layers, ArrowUpRight } from 'lucide-react';
+import { Menu, Search, Star, Sun, Moon, Download, Settings, Clock, Trash2, X, ArrowUpRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { TOOLS, searchTools } from '../data/tools';
 import { clearRecentFiles } from '../services/storage';
@@ -18,7 +18,7 @@ export function Topbar({ breadcrumbs = [] }) {
   return <>
     <header className="workspace-header">
       <div className="header-inner">
-        <Link to="/" className="brand" aria-label="CreatePDF home"><span className="brand-symbol"><Layers size={21} strokeWidth={2} /></span><span>createpdf<span className="brand-domain">.si</span></span></Link>
+        <Link to="/" className="brand" aria-label="CreatePDF home"><span className="brand-symbol"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V9Z" /><path d="M13 3v6h6M8 15h7M11.5 11.5v7" /></svg></span><span>createpdf<span className="brand-domain">.si</span></span></Link>
         <nav className={`workspace-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Main navigation">
           <Link to="/" className={location.pathname === '/' && !location.hash ? 'active' : ''}>Overview</Link>
           <Link to="/#tools" className={location.hash === '#tools' ? 'active' : ''}>All tools <span className="nav-count">{TOOLS.length}</span></Link>

@@ -4,7 +4,7 @@ import { getPref, setPref, getStarredTools, starTool, unstarTool, getRecentFiles
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const [theme, setThemeState] = useState('dark');
+  const [theme, setThemeState] = useState('light');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [starredTools, setStarredTools] = useState(new Set());
@@ -17,7 +17,7 @@ export function AppProvider({ children }) {
   // Load preferences
   useEffect(() => {
     async function loadPrefs() {
-      const savedTheme = await getPref('theme', 'dark');
+      const savedTheme = await getPref('theme', 'light');
       const savedCollapsed = await getPref('sidebarCollapsed', false);
       setThemeState(savedTheme);
       setSidebarCollapsed(savedCollapsed);
