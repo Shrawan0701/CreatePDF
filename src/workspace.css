@@ -61,7 +61,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px s
 .workspace-header { position: sticky; top: 0; z-index: 60; background: var(--bg-overlay); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
 .header-inner { max-width: 1360px; height: 78px; padding: 0 40px; margin: auto; display: flex; align-items: center; gap: 48px; }
 .brand, .footer-wordmark { display: inline-flex; align-items: center; gap: 10px; color: var(--text-primary); text-decoration: none; font-size: 23px; font-weight: 750; letter-spacing: -1px; flex-shrink: 0; }
-.brand-symbol { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 10px; color: var(--text-on-primary); background: var(--primary); }
+.brand-symbol { width: 35px; height: 35px; display: block; object-fit: contain; flex-shrink: 0; }
 .brand-domain, .footer-wordmark span { color: var(--text-muted); font-weight: 450; }
 .workspace-nav { display: flex; align-items: center; gap: 26px; height: 100%; }
 .workspace-nav a { position: relative; display: flex; align-items: center; gap: 6px; height: 100%; color: var(--text-secondary); text-decoration: none; font-size: 13px; font-weight: 550; white-space: nowrap; }
