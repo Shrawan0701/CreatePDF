@@ -1,5 +1,6 @@
 import { TOOLS } from '../data/tools.js';
 import { SEO_TITLES, TOOL_GUIDES } from './toolGuides.js';
+import { BRAND_ICONS } from '../data/brand.js';
 
 export const DEFAULT_SITE_URL = 'https://createpdf.si';
 export function siteOrigin(value = DEFAULT_SITE_URL) {
@@ -24,7 +25,7 @@ export function getPageSeo(pathname, origin = DEFAULT_SITE_URL) {
     : tool ? snippet(`${tool.description}. ${TOOL_GUIDES[tool.id][0]}`) : path === '/settings' ? 'Manage your CreatePDF.si appearance and local browser storage.' : 'This CreatePDF.si page could not be found. Browse the PDF toolkit to find the tool you need.';
   const canonical = `${site}${path === '/' ? '/' : path}`;
   const webSite = { '@type': 'WebSite', '@id': `${site}/#website`, name: 'CreatePDF.si', alternateName: 'CreatePDF', url: `${site}/`, inLanguage: 'en' };
-  const organization = { '@type': 'Organization', '@id': `${site}/#organization`, name: 'CreatePDF.si', url: `${site}/`, logo: `${site}/favicon.svg` };
+  const organization = { '@type': 'Organization', '@id': `${site}/#organization`, name: 'CreatePDF.si', url: `${site}/`, logo: `${site}${BRAND_ICONS.icon512}` };
   const graph = [webSite, organization];
   if (indexable) graph.push({ '@type': 'WebPage', '@id': `${canonical}#webpage`, url: canonical, name: title, description, inLanguage: 'en', isPartOf: { '@id': webSite['@id'] }, publisher: { '@id': organization['@id'] } });
   if (tool) {

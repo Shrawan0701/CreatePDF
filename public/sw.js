@@ -1,5 +1,5 @@
 const CACHE_NAME = `createpdf-${self.__CREATEPDF_VERSION || 'development'}`
-const STATIC_ASSETS = self.__CREATEPDF_PRECACHE || ['/', '/manifest.json', '/favicon.svg']
+const STATIC_ASSETS = self.__CREATEPDF_PRECACHE || ['/', '/manifest.json']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)))
@@ -15,6 +15,14 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
   if (request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname === '/health' || url.pathname === '/signal') return
+
+  if (url.pathname === '/manifest.json') {
+    event.respondWith(fetch(request, { cache: 'no-cache' }).catch(async () => {
+      const cache = await caches.open(CACHE_NAME)
+      return (await cache.match(request)) || cache.match('/manifest.json')
+    }))
+    return
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(async () => {

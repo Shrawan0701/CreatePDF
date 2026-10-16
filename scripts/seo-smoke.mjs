@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { APP_PATHS, getPageSeo, INDEXABLE_PATHS } from '../src/seo/metadata.js';
+import { BRAND_ICONS } from '../src/data/brand.js';
 
 const origin = 'http://127.0.0.1:4193';
 const server = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: '4193' }, stdio: 'ignore' });
@@ -58,6 +59,27 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   const errors = []; page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`${origin}/pdf-translator`, { waitUntil: 'networkidle' });
+  const manifestHref = await page.locator('link[rel=manifest]').getAttribute('href');
+  assert.equal(manifestHref, `/manifest.json?v=${BRAND_ICONS.version}`);
+  const manifest = await (await fetch(`${origin}${manifestHref}`)).json();
+  for (const icon of manifest.icons) {
+    const response = await fetch(`${origin}${icon.src}`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /image\/png/);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(`${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(20)}`, icon.sizes);
+    assert.ok(icon.src.includes(BRAND_ICONS.version));
+  }
+  assert.ok(manifest.icons.some((icon) => icon.sizes === '192x192' && icon.purpose === 'any'));
+  assert.ok(manifest.icons.some((icon) => icon.sizes === '512x512' && icon.purpose === 'maskable'));
+  assert.equal(await page.locator('link[rel=icon]').getAttribute('href'), BRAND_ICONS.favicon32);
+  assert.equal(await page.locator('link[rel=apple-touch-icon]').getAttribute('href'), BRAND_ICONS.apple180);
+  const session = await page.context().newCDPSession(page);
+  const appManifest = await session.send('Page.getAppManifest');
+  assert.ok(appManifest.url.endsWith(manifestHref));
+  assert.deepEqual(JSON.parse(appManifest.data).icons, manifest.icons);
+  await session.detach();
+  console.log('App icon checks passed: browser manifest, versioned PNG icons, physical sizes, favicon and Apple touch icon.');
   await page.getByRole('button', { name: 'Translate entire PDF', exact: true }).waitFor();
   await page.reload({ waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Translate entire PDF', exact: true }).waitFor();

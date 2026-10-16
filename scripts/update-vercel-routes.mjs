@@ -14,6 +14,7 @@ config.headers = [
   { source: '/api/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] },
   { source: '/settings', headers: [{ key: 'X-Robots-Tag', value: 'noindex, follow' }] },
   { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+  { source: '/manifest.json', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
 ];
 await writeFile('vercel.json', JSON.stringify(config, null, 2) + '\n');
 console.log(`Configured ${config.rewrites.length} explicit Vercel page rewrites. API functions and static assets keep their own routes.`);
