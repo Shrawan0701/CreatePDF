@@ -4,7 +4,7 @@
   "functions": {
     "api/word-to-pdf.js": {
       "maxDuration": 120,
-      "includeFiles": "node_modules/@matbee/libreoffice-converter/{package.json,dist/node.worker.cjs,wasm/*.{cjs,wasm,data}}"
+      "includeFiles": "{server/wordWasm.worker.mjs,node_modules/@matbee/libreoffice-converter/{package.json,wasm/*.{cjs,wasm,data}}}"
     },
     "api/*.js": {
       "maxDuration": 120

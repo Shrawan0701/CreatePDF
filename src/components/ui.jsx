@@ -113,16 +113,17 @@ export function FileItem({ file, onRemove, meta }) {
 // Progress Bar
 // ===========================
 export function ProgressBar({ value, label }) {
+  const indeterminate = value == null
   return (
     <div>
       {label && (
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
           <span>{label}</span>
-          <span>{Math.round(value)}%</span>
+          {!indeterminate && <span>{Math.round(value)}%</span>}
         </div>
       )}
-      <div className="progress-bar">
-        <div className="progress-bar-fill" style={{ width: `${value}%` }} />
+      <div className="progress-bar" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={indeterminate ? undefined : Math.round(value)}>
+        <div className={`progress-bar-fill${indeterminate ? ' progress-bar-indeterminate' : ''}`} style={{ width: indeterminate ? '35%' : `${value}%` }} />
       </div>
     </div>
   );

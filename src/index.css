@@ -917,6 +917,10 @@ input, textarea, select {
 }
 
 /* ===== BADGES ===== */
+.progress-bar-indeterminate { animation: conversion-progress 1.5s ease-in-out infinite; }
+@keyframes conversion-progress { from { transform: translateX(-100%); } to { transform: translateX(390%); } }
+@media (prefers-reduced-motion: reduce) { .progress-bar-indeterminate { animation: none; opacity: .65; } }
+
 .badge {
   display: inline-flex;
   align-items: center;

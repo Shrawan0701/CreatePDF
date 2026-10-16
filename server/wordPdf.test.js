@@ -52,6 +52,28 @@ describe('native Word conversion', () => {
     expect(res.headers).toMatchObject({ 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' })
     expect(res.body).toEqual(pdf)
   })
+  it('streams server stages before sending the original binary PDF', async () => {
+    const request = Readable.from([await fixture()]); request.method = 'POST'; request.headers = { accept: 'application/vnd.createpdf.word-stream' }
+    const res = response()
+    const chunks = []
+    res.write = data => chunks.push(data)
+    await createWordPdfHandler({ convert: async (_bytes, progress) => { progress('Converting document'); return pdf } })(request, res)
+    expect(res.headers['Content-Type']).toBe('application/vnd.createpdf.word-stream')
+    const events = chunks.map(chunk => JSON.parse(chunk))
+    expect(events).toContainEqual({ type: 'progress', label: 'Converting document' })
+    expect(events.at(-1)).toEqual({ type: 'pdf', length: pdf.length })
+    expect(res.body).toEqual(pdf)
+  })
+  it('sends a structured streaming error after headers have been sent', async () => {
+    const request = Readable.from([await fixture()]); request.method = 'POST'; request.headers = { accept: 'application/vnd.createpdf.word-stream' }
+    const res = response()
+    const chunks = []
+    res.write = data => chunks.push(JSON.parse(data))
+    await createWordPdfHandler({ convert: async () => { throw Object.assign(new Error('Invalid document'), { status: 400 }) } })(request, res)
+    expect(chunks.at(-1)).toEqual({ type: 'error', error: 'Invalid document' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toBeUndefined()
+  })
   it('reports conversion failures without returning an invalid PDF', async () => {
     const request = Readable.from([await fixture()]); request.method = 'POST'; request.headers = {}
     const res = response()
