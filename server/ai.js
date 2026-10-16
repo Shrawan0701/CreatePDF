@@ -1,6 +1,7 @@
 // Shared by Vercel functions, Vite middleware and the existing optional server.
-import { LANGUAGE_NAMES, REPLY_LANGUAGES, SUMMARY_LANGUAGES } from '../shared/languages.js';
+import { LANGUAGE_NAMES, LANGUAGE_SCRIPTS, REPLY_LANGUAGES, SUMMARY_LANGUAGES } from '../shared/languages.js';
 import { AI_SCHEMAS } from './aiSchemas.js';
+import { unsupportedFigures } from '../shared/numericFacts.js';
 export const LANGUAGES = ['Auto-detect', ...LANGUAGE_NAMES];
 const lengths = ['short', 'medium', 'detailed'];
 const formats = ['executive', 'key-points', 'study-notes', 'chapter-wise'];
@@ -18,10 +19,23 @@ const normalizeQuote = (value) => value.normalize('NFC').replace(/\s+/g, ' ').tr
 const containsQuote = (source, quote) => normalizeQuote(source).includes(normalizeQuote(quote));
 const normalizeCitations = (value) => value.replace(/\[(?:p\.?|page|पृ\.?|पृष्ठ(?:\s*क्रमांक)?|पान|página|pág\.?|seite|pagina)\s*[:.]?\s*([0-9०-९]+)\]/giu, (_, page) => `[p. ${page.replace(/[०-९]/g, (digit) => String(digit.charCodeAt(0) - 0x0966))}]`);
 const languageInstruction = (language, automatic) => language.startsWith('Same as') ? automatic : `REQUIRED OUTPUT LANGUAGE: ${language}. Write all headings, explanations and bullets in ${language}, even if the source or draft is in another language. Keep source quotations and citation syntax unchanged.`;
-const missingScript = (value, language) => ['Hindi', 'Marathi'].includes(language) && !/[\u0900-\u097F]/.test(value);
+const missingScript = (value, language) => Boolean(LANGUAGE_SCRIPTS[language] && !LANGUAGE_SCRIPTS[language].test(value));
+function wrongTranslationScript(result, target) {
+  const letters = result.blocks.flatMap(block => block.text.match(/\p{L}/gu) || []);
+  if (letters.length < 12) return false;
+  const script = LANGUAGE_SCRIPTS[target];
+  if (script) return !letters.some(letter => script.test(letter));
+  const foreignLetters = letters.filter(letter => !/\p{Script=Latin}/u.test(letter)).length;
+  return foreignLetters >= 8 && foreignLetters / letters.length > .15;
+}
 function noEvidence(language) {
   return ({
     English: 'I could not verify an answer in this document. Try a more specific question or name a page. For scans, check the OCR language and text quality.',
+    Bengali: 'এই নথিতে উত্তর যাচাই করা যায়নি। আরও নির্দিষ্ট প্রশ্ন করুন বা পৃষ্ঠা নম্বর দিন। স্ক্যানের জন্য OCR-এর ভাষা ও লেখার মান পরীক্ষা করুন।',
+    Tamil: 'இந்த ஆவணத்தில் பதிலை உறுதிப்படுத்த முடியவில்லை. மேலும் குறிப்பான கேள்வியைக் கேளுங்கள் அல்லது பக்க எண்ணைக் குறிப்பிடுங்கள். ஸ்கேன் செய்த ஆவணங்களுக்கு OCR மொழியையும் உரையின் தரத்தையும் சரிபார்க்கவும்.',
+    Telugu: 'ఈ పత్రంలో సమాధానాన్ని ధృవీకరించలేకపోయాను. మరింత స్పష్టమైన ప్రశ్న అడగండి లేదా పేజీ సంఖ్యను పేర్కొనండి. స్కాన్ చేసిన పత్రాలకు OCR భాషను, వచన నాణ్యతను తనిఖీ చేయండి.',
+    Kannada: 'ಈ ದಾಖಲೆಯಲ್ಲಿ ಉತ್ತರವನ್ನು ಪರಿಶೀಲಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಹೆಚ್ಚು ನಿರ್ದಿಷ್ಟವಾದ ಪ್ರಶ್ನೆಯನ್ನು ಕೇಳಿ ಅಥವಾ ಪುಟ ಸಂಖ್ಯೆಯನ್ನು ತಿಳಿಸಿ. ಸ್ಕ್ಯಾನ್ ಮಾಡಿದ ದಾಖಲೆಗಳಿಗೆ OCR ಭಾಷೆ ಮತ್ತು ಪಠ್ಯದ ಗುಣಮಟ್ಟವನ್ನು ಪರಿಶೀಲಿಸಿ.',
+    Gujarati: 'આ દસ્તાવેજમાં જવાબની પુષ્ટિ થઈ શકી નથી. વધુ ચોક્કસ પ્રશ્ન પૂછો અથવા પાનાનો નંબર જણાવો. સ્કેન માટે OCRની ભાષા અને લખાણની ગુણવત્તા તપાસો.',
     Hindi: 'इस दस्तावेज़ में उत्तर की पुष्टि नहीं हो सकी। अधिक स्पष्ट प्रश्न पूछें या पृष्ठ संख्या बताएं। स्कैन के लिए OCR की भाषा और पाठ की गुणवत्ता जाँचें।',
     Marathi: 'या दस्तऐवजात उत्तराची पडताळणी करता आली नाही. अधिक स्पष्ट प्रश्न विचारा किंवा पृष्ठ क्रमांक सांगा. स्कॅनसाठी OCR ची भाषा आणि मजकुराची गुणवत्ता तपासा.',
     Spanish: 'No pude verificar una respuesta en este documento. Haz una pregunta más específica o indica una página. Para documentos escaneados, revisa el idioma y la calidad del OCR.',
@@ -33,7 +47,7 @@ function noEvidence(language) {
 }
 
 export async function complete(system, data, { apiKey = process.env.OPENAI_API_KEY, fetchImpl = fetch, schema } = {}) {
-  if (!apiKey?.trim()) fail('OpenAI is not configured. Set OPENAI_API_KEY in .env.local, restart development, or add it in Vercel environment variables.', 503);
+  if (!apiKey?.trim()) fail('AI is not configured. Check the server API key and restart or redeploy the application.', 503);
   let response;
   try {
     response = await fetchImpl('https://api.openai.com/v1/chat/completions', {
@@ -43,16 +57,16 @@ export async function complete(system, data, { apiKey = process.env.OPENAI_API_K
       body: JSON.stringify({ model: 'gpt-4o-mini', temperature: 0.1, max_tokens: 12000, store: false,
         response_format: schema ? { type: 'json_schema', json_schema: { name: schema, strict: true, schema: AI_SCHEMAS[schema] } } : { type: 'json_object' }, messages: [{ role: 'system', content: `${security}\n${system}` }, { role: 'user', content: JSON.stringify(data) }] }),
     });
-  } catch (error) { fail(error.name === 'TimeoutError' ? 'OpenAI timed out. Please retry this step.' : 'Unable to connect to OpenAI. Please retry.', 502); }
+  } catch (error) { fail(error.name === 'TimeoutError' ? 'AI timed out. Please retry this step.' : 'Unable to connect to AI. Please retry.', 502); }
   if (!response.ok) {
-    const message = response.status === 429 ? 'OpenAI rate limit or quota reached. Check billing or try again later.' : response.status === 401 ? 'The server’s OpenAI key was rejected. Check OPENAI_API_KEY.' : 'OpenAI could not process this request. Please retry.';
+    const message = response.status === 429 ? 'AI rate limit or quota reached. Check billing or try again later.' : response.status === 401 ? 'The server’s AI key was rejected. Check the server API key.' : 'AI could not process this request. Please retry.';
     fail(message, response.status === 429 ? 429 : 502);
   }
   const result = await response.json();
   const choice = result.choices?.[0];
-  if (choice?.message?.refusal) fail('OpenAI could not process this document request. Try a different section or question.', 422);
-  if (choice?.finish_reason !== 'stop') fail('OpenAI did not finish the response. Retry with a smaller section.', 502);
-  try { return JSON.parse(choice.message.content); } catch { fail('OpenAI returned an unreadable response. Please retry.', 502); }
+  if (choice?.message?.refusal) fail('AI could not process this document request. Try a different section or question.', 422);
+  if (choice?.finish_reason !== 'stop') fail('AI did not finish the response. Retry with a smaller section.', 502);
+  try { return JSON.parse(choice.message.content); } catch { fail('AI returned an unreadable response. Please retry.', 502); }
 }
 
 export async function runTask(task, body, options) {
@@ -66,10 +80,12 @@ export async function runTask(task, body, options) {
     if (JSON.stringify(blocks).length > 18000) fail('Translation section is too large.');
     const context = body.context == null ? '' : text(body.context, 'Translation context', 6000);
     const validate = (result) => { if (!Array.isArray(result?.blocks) || result.blocks.length !== blocks.length || result.blocks.some((block, i) => block.id !== blocks[i].id || typeof block.text !== 'string' || !block.text.trim())) fail('Translation was incomplete. Please retry.', 502); };
-    let result = await generate('You are a professional document translator. Translate EVERY input block into the target language; never summarize, omit or add content. Preserve meaning, tone, negation, units, dates, currency, identifiers, numbers, markdown, line breaks and list markers. Use natural, grammatically correct target-language writing and consistent technical terminology. Context is supplied only for disambiguation, not as extra text to translate. Keep proper names unless a standard localized spelling exists. Never guess unreadable OCR text; retain uncertain fragments. Output {"blocks":[{"id":"unchanged input id","text":"translated text"}]}, exactly one per input ID in input order.', { source, target, blocks, context }, 'translate');
+    const targetRule = `REQUIRED OUTPUT LANGUAGE: ${target}. Translate readable source text into ${target}, regardless of its original language or script. Auto-detect refers ONLY to the source; it must NEVER change the selected target. Use the normal writing script of ${target}, not transliteration. The source may contain mixed languages or visually reordered PDF glyphs; interpret the readable words but never invent missing information.`;
+    let result = await generate(`You are a professional document translator. ${targetRule} Translate EVERY input block into the target language; never summarize, omit or add content. Preserve meaning, tone, negation, units, dates, currency, identifiers, numbers, markdown, line breaks and list markers. Use natural, grammatically correct target-language writing and consistent technical terminology. Context is supplied only for disambiguation, not as extra text to translate. Keep proper names unless a standard localized spelling exists. Never guess unreadable OCR text; retain uncertain fragments. Output {"blocks":[{"id":"unchanged input id","text":"translated text"}]}, exactly one per input ID in input order.`, { source, target, blocks, context }, 'translate');
     validate(result);
-    result = await generate('Proofread this translation against the ORIGINAL blocks. Correct mistranslations, omissions, grammar, terminology, negation and numeric/unit mistakes. Check every sentence and every table-cell value. Preserve all IDs and order. Do not add explanations or content from context. Do not shorten or paraphrase away source details. Return the corrected {"blocks":[{"id":"original id","text":"complete corrected translation"}]}.', { source, target, blocks, draft: result.blocks, context }, 'translate');
+    result = await generate(`Proofread this translation against the ORIGINAL blocks. ${targetRule} ${wrongTranslationScript(result, target) ? 'The draft failed target-language validation. Rewrite its source-language passages in the required target language.' : ''} Correct mistranslations, omissions, grammar, terminology, negation and numeric/unit mistakes. Check every sentence and every table-cell value. Preserve all IDs and order. Do not add explanations or content from context. Do not shorten or paraphrase away source details. Return the corrected {"blocks":[{"id":"original id","text":"complete corrected translation"}]}.`, { source, target, blocks, draft: result.blocks, context }, 'translate');
     validate(result);
+    if (wrongTranslationScript(result, target)) fail(`Translation was not returned in ${target}. Please retry.`, 502);
     return { blocks: result.blocks };
   }
   if (task === 'summarize') {
@@ -83,13 +99,19 @@ export async function runTask(task, body, options) {
     const draft = stage === 'review' ? text(body.draft, 'Summary draft', 14000) : undefined;
     let result = await generate(`You are an accurate document analyst. Summarize ONLY the supplied source material. Output {"text":"Markdown summary"}. ${stage === 'review' ? 'This is a grounded editorial review. Compare the draft with the supplied source, correct every unsupported claim, numeric/unit/date/name error, missing qualification, contradiction and invented recommendation. Restore material omissions within the requested length. Return the COMPLETE corrected summary, not a review report.' : 'Read every supplied section before writing. Preserve exact figures, currency, units, dates, names, exceptions, limitations and uncertainty. Do not fabricate conclusions or expand OCR ambiguities.'} Use requested language; "Same as document" means the main source language. Format rules: executive = concise overview, major findings and implications; recommendations ONLY if explicitly in the source. key-points = organized topical bullets with supporting details. study-notes = clear definitions, concepts, relationships, facts and short review questions with source-grounded answers. chapter-wise = EVERY detected chapter/heading in source order with its page references; use page sections if chapters are absent. Do not invent chapter titles as if original. Short ≈150 words, medium ≈400, detailed ≈900, scaled to source length; for chapter-wise preserve coverage before word target. At section/combine stages produce detailed factual notes preserving all distinct topics and original [Page N] labels so downstream synthesis can retain source coverage. At final/review stages deduplicate repeated points, lead with the substance, use clear headings and bullets. When source page labels are supplied, EVERY factual bullet/paragraph MUST have inline [p. N] references to its supporting pages. Keep citation syntax in English even in translated summaries. Never renumber source pages or cite a page not present in the source material.`, { text: content, length, format, stage, language, draft }, 'summarize');
     if (typeof result.text !== 'string' || !result.text.trim()) fail('No summary was returned.', 502);
+    result.text = normalizeCitations(result.text);
     const available = new Set(body.sourcePages ?? [...content.matchAll(/\[(?:Page\s+|p\.\s*)(\d+)\]/gi)].map((match) => Number(match[1])));
-    if ((available.size && ['final', 'review'].includes(stage) && !/\[(?:Page\s+|p\.\s*)\d+\]/i.test(result.text)) || missingScript(result.text, language)) {
-      result = await generate(`Correct the summary's language and source references. Return the COMPLETE corrected summary with [p. N] references beside factual bullets and paragraphs, using ONLY supplied source page labels and evidence. Do not invent or renumber pages. Correct any unsupported claim. Output {"text":"complete corrected summary with citations"}. ${languageRule}`, { text: content, draft: result.text, language, length, format, sourcePages: [...available] }, 'summarize');
-      if (typeof result.text !== 'string' || (available.size && !/\[(?:Page\s+|p\.\s*)\d+\]/i.test(result.text))) fail('The summary is missing verifiable source references. Please retry.', 502);
+    const invalidPages = value => [...value.matchAll(/\[(?:Page\s+|p\.\s*)(\d+)\]/gi)].some(match => !available.has(Number(match[1])));
+    const incorrectFigures = unsupportedFigures(result.text, content);
+    if (incorrectFigures.length || (available.size && ['final', 'review'].includes(stage) && !/\[(?:Page\s+|p\.\s*)\d+\]/i.test(result.text)) || missingScript(result.text, language) || invalidPages(result.text)) {
+      result = await generate(`Correct the summary's language, figures and source references. Return the COMPLETE corrected summary with [p. N] references beside factual bullets and paragraphs, using ONLY supplied source page labels and evidence. Check every amount, quantity, date and identifier against its original source entry. The unsupportedFigures field identifies numbers absent from the source: replace them with the exact corresponding source values, or omit the unsupported claim if no value can be verified. Never guess digits, recalculate totals or convert number scales, units or time formats. Do not invent or renumber pages. Correct any unsupported claim. Output {"text":"complete corrected summary with citations"}. ${languageRule}`, { text: content, draft: result.text, unsupportedFigures: incorrectFigures, language, length, format, sourcePages: [...available] }, 'summarize');
+      if (typeof result.text !== 'string' || !result.text.trim()) fail('No summary was returned.', 502);
+      result.text = normalizeCitations(result.text);
+      if (available.size && !/\[(?:Page\s+|p\.\s*)\d+\]/i.test(result.text)) fail('The summary is missing verifiable source references. Please retry.', 502);
     }
     if (missingScript(result.text, language)) fail('The summary was not returned in the requested language. Please retry.', 502);
-    if ([...result.text.matchAll(/\[(?:Page\s+|p\.\s*)(\d+)\]/gi)].some((match) => !available.has(Number(match[1])))) fail('The summary referenced a page absent from its source. Please retry.', 502);
+    if (invalidPages(result.text)) fail('The summary referenced a page absent from its source. Please retry.', 502);
+    if (unsupportedFigures(result.text, content).length) fail('Some summary figures could not be verified against the document. Please retry.', 502);
     return { text: result.text };
   }
   if (task === 'chat') {

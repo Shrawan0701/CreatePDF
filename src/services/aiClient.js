@@ -1,7 +1,7 @@
 export async function callAi(task, body, signal) {
   const response = await fetch(`/api/${task}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
   const data = await response.json().catch(() => { throw new Error('The API is unavailable. Run npm run dev locally or deploy with Vercel functions.'); });
-  if (!response.ok) throw new Error(data.error || 'The AI request failed.');
+  if (!response.ok) throw Object.assign(new Error(data.error || 'The AI request failed.'), { status: response.status });
   return data;
 }
 

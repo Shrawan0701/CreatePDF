@@ -306,7 +306,7 @@ export async function addPageNumbers(file, options = {}) {
 
 export async function imagesToPdf(imageFiles, options = {}) {
   const { PDFDocument } = await getPdfLib();
-  const { pageSize = [595, 842], fitMode = 'fit', margin = 20 } = options;
+  const { pageSize = 'image', fitMode = 'fit', margin = 0 } = options;
   const pdfDoc = await PDFDocument.create();
 
   for (const file of imageFiles) {
@@ -318,7 +318,7 @@ export async function imagesToPdf(imageFiles, options = {}) {
     } else if (file.type === 'image/png') {
       img = await pdfDoc.embedPng(bytes);
     } else {
-      // Convert to JPEG via canvas
+      // Preserve transparency in WebP/GIF and other browser-supported formats.
       const url = URL.createObjectURL(file);
       const canvas = document.createElement('canvas');
       const imgEl = await new Promise((res, rej) => {
@@ -331,14 +331,22 @@ export async function imagesToPdf(imageFiles, options = {}) {
       canvas.height = imgEl.height;
       canvas.getContext('2d').drawImage(imgEl, 0, 0);
       URL.revokeObjectURL(url);
-      const jpegBytes = canvas.toDataURL('image/jpeg', 0.9)
+      const pngBytes = canvas.toDataURL('image/png')
         .split(',')[1];
-      const binaryStr = atob(jpegBytes);
+      const binaryStr = atob(pngBytes);
       const bArr = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) bArr[i] = binaryStr.charCodeAt(i);
-      img = await pdfDoc.embedJpg(bArr);
+      img = await pdfDoc.embedPng(bArr);
     }
 
+    if (pageSize === 'image') {
+      const scale = Math.min(1, 14400 / Math.max(img.width, img.height));
+      const width = img.width * scale;
+      const height = img.height * scale;
+      const page = pdfDoc.addPage([width, height]);
+      page.drawImage(img, { x: 0, y: 0, width, height });
+      continue;
+    }
     const page = pdfDoc.addPage(pageSize);
     const { width, height } = page.getSize();
     const maxW = width - margin * 2;

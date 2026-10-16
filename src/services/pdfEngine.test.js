@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
-import { mergePdfs, parsePageRanges, rotatePdfPages, splitPdfByRanges } from './pdfEngine'
+import { imagesToPdf, mergePdfs, parsePageRanges, rotatePdfPages, splitPdfByRanges } from './pdfEngine'
 
 async function pdfFile(pageCount, name = 'fixture.pdf') {
   const document = await PDFDocument.create()
@@ -39,5 +39,29 @@ describe('PDF page operations', () => {
     const output = await rotatePdfPages(await pdfFile(2), { 0: 90, 1: 180 })
     const document = await PDFDocument.load(await output.arrayBuffer())
     expect(document.getPages().map((page) => page.getRotation().angle)).toEqual([90, 180])
+  })
+})
+
+describe('image PDF page sizing', () => {
+  const landscape = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAACAQMAAABFZu8gAAAAA1BMVEUUPFpEGPdjAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC'
+  const portrait = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAAFAQMAAABVfa/fAAAAA1BMVEUUPFpEGPdjAAAAC0lEQVR4nGNggAEAAAoAAX+AdF4AAAAASUVORK5CYII='
+  const image = encoded => new Blob([Buffer.from(encoded, 'base64')], { type: 'image/png' })
+
+  it('defaults to a separate borderless page matching each image, preserving order and aspect ratio', async () => {
+    const output = await imagesToPdf([image(landscape), image(portrait)])
+    const pdf = await PDFDocument.load(await output.arrayBuffer())
+    expect(pdf.getPages().map(page => [page.getWidth(), page.getHeight()])).toEqual([[4, 2], [2, 5]])
+  })
+
+  it('ignores paper margins in fit-to-image mode', async () => {
+    const output = await imagesToPdf([image(landscape)], { pageSize: 'image', margin: 100 })
+    const pdf = await PDFDocument.load(await output.arrayBuffer())
+    expect(pdf.getPage(0).getSize()).toEqual({ width: 4, height: 2 })
+  })
+
+  it('retains explicitly selected paper sizes', async () => {
+    const output = await imagesToPdf([image(landscape)], { pageSize: [612, 792], margin: 20 })
+    const pdf = await PDFDocument.load(await output.arrayBuffer())
+    expect(pdf.getPage(0).getSize()).toEqual({ width: 612, height: 792 })
   })
 })

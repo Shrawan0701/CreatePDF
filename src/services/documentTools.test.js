@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { documentSections, layoutBlocks, retrieveSections, splitText } from './documentText';
 import { extractInvoiceLocally, invoiceCsv, invoiceIssues, normalizeInvoice } from './invoiceExtraction';
-import { MM_TO_PT, passportLayout, photoCrop } from './passportSheet';
+import { MM_TO_PT, fillPhotoCopies, passportCutGuides, passportLayout, photoCrop } from './passportSheet';
 
 describe('document extraction and retrieval', () => {
   it('chunks all long and multilingual content without losing characters', () => {
@@ -49,6 +49,31 @@ describe('invoice extraction and validation', () => {
 });
 
 describe('passport sheet physical layout', () => {
+  it('supports landscape and photo paper without changing physical photo dimensions', () => {
+    const landscape = passportLayout({ width: 35, height: 45, orientation: 'landscape' }, [{ copies: 4 }]);
+    expect([landscape.pageWidth, landscape.pageHeight]).toEqual([297, 210]);
+    expect(landscape.capacity).toBe(21);
+    const small = passportLayout({ width: 35, height: 45, paper: '4x6' }, [{ copies: 8 }]);
+    expect([small.pageWidth, small.pageHeight]).toEqual([101.6, 152.4]);
+    expect(small.capacity).toBe(4); expect(small.pageCount).toBe(2);
+    expect(small.placements.every(photo => photo.width === 35 && photo.height === 45)).toBe(true);
+  });
+  it('fills only the unused cells on the last sheet and preserves other photos', () => {
+    const photos = [{ copies: 4 }, { copies: 4 }];
+    const layout = passportLayout({ width: 35, height: 45 }, photos);
+    expect(fillPhotoCopies(layout, photos, 0)).toBe(16);
+    expect(photos).toEqual([{ copies: 4 }, { copies: 4 }]);
+    expect(fillPhotoCopies(layout, [{ copies: 20 }], 0)).toBe(20);
+  });
+  it('centers each sheet independently and keeps cut guides inside paper', () => {
+    const layout = passportLayout({ width: 35, height: 45, centered: true }, [{ copies: 21 }]);
+    const last = layout.placements.at(-1);
+    expect(last.x).toBeCloseTo((210 - 35) / 2);
+    expect(last.y).toBeCloseTo((297 - 45) / 2);
+    expect(last.width).toBe(35);
+    const guides = passportCutGuides({ x: 0, y: 0, width: 210, height: 297 }, layout, 5);
+    expect(guides.every(([x1, y1, x2, y2]) => x1 >= 0 && x2 <= 210 && y1 >= 0 && y2 <= 297)).toBe(true);
+  });
   it('uses exact physical dimensions and paginates all requested copies', () => {
     const result = passportLayout({ width: 35, height: 45, paper: 'A4', margin: 10, spacing: 5 }, [{ copies: 30 }]);
     expect(result.columns).toBe(4); expect(result.rows).toBe(5); expect(result.pageCount).toBe(2);

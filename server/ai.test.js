@@ -4,6 +4,76 @@ import { complete, createHandler, runTask } from './ai';
 const stub = (content, finish_reason = 'stop') => ({ apiKey: 'test-server-key', fetchImpl: vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ finish_reason, message: { content: JSON.stringify(content) } }] }) })) });
 
 describe('shared OpenAI API', () => {
+  it('repairs summary amounts that do not match the source before returning them', async () => {
+    const options = stub({ text: 'बिर्याणी ₹1.00; पनीर ₹398.00; एकूण ₹399.00. [p. 1]' });
+    options.fetchImpl.mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ text: 'बिर्याणी ₹31.00; पनीर ₹7398.00; एकूण ₹3399.00. [p. 1]' }) } }] }) });
+    const input = { text: '[Page 1] Biryani ₹1.00; paneer ₹398.00; grand total ₹399.00.', sourcePages: [1], length: 'short', format: 'executive', stage: 'final', language: 'Marathi' };
+    const result = await runTask('summarize', input, options);
+    expect(result.text).toContain('₹399.00');
+    expect(options.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(JSON.parse(options.fetchImpl.mock.calls[1][1].body).messages[1].content).unsupportedFigures).toEqual(['31.00', '7398.00', '3399.00']);
+    await expect(runTask('summarize', input, stub({ text: 'एकूण ₹3399.00. [p. 1]' }))).rejects.toThrow('figures could not be verified');
+  });
+  it('accepts localized Marathi source references without unnecessary repair requests', async () => {
+    const options = stub({ text: 'पोर्टल विद्यार्थ्यांना नोकरीच्या संधी शोधण्यास मदत करते. [पृ. ५]' });
+    const result = await runTask('summarize', { text: '[Page 5] The portal helps students find jobs.', sourcePages: [5], length: 'short', format: 'executive', stage: 'final', language: 'Marathi' }, options);
+    expect(result.text).toContain('[p. 5]');
+    expect(options.fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  const addedLanguages = [
+    ['Bengali', 'মোট আয় 420 ছিল।'],
+    ['Tamil', 'மொத்த வருவாய் 420 ஆகும்.'],
+    ['Telugu', 'మొత్తం ఆదాయం 420.'],
+    ['Kannada', 'ಒಟ್ಟು ಆದಾಯ 420 ಆಗಿತ್ತು.'],
+    ['Gujarati', 'કુલ આવક 420 હતી.'],
+  ];
+  const translationSamples = [
+    ['English', 'Annual revenue was 420 in the report.'],
+    ['Hindi', 'वार्षिक आय रिपोर्ट में 420 थी।'],
+    ['Marathi', 'अहवालातील वार्षिक महसूल 420 होता.'],
+    ...addedLanguages,
+    ['Spanish', 'Los ingresos anuales fueron 420.'],
+    ['French', 'Le revenu annuel était de 420.'],
+    ['German', 'Der Jahresumsatz betrug 420.'],
+    ['Portuguese', 'A receita anual foi de 420.'],
+    ['Italian', 'Il fatturato annuale era di 420.'],
+  ];
+  const translationPairs = translationSamples.flatMap(([source, original]) => translationSamples.filter(([target]) => target !== source).map(([target, translated]) => ({ source, target, original, translated })));
+  it.each(translationPairs)('keeps $target as the required target when translating from $source', async ({ source, target, original, translated }) => {
+    const options = stub({ blocks: [{ id: '1', text: translated }] });
+    const result = await runTask('translate', { source, target, blocks: [{ id: '1', text: original }] }, options);
+    expect(result.blocks[0].text).toBe(translated);
+    for (const [, request] of options.fetchImpl.mock.calls) {
+      const body = JSON.parse(request.body);
+      expect(body.messages[0].content).toContain(`REQUIRED OUTPUT LANGUAGE: ${target}`);
+      expect(JSON.parse(body.messages[1].content)).toMatchObject({ source, target });
+    }
+  });
+  it('repairs Hindi returned for an auto-detected source with an English target', async () => {
+    const hindi = 'वार्षिक आय रिपोर्ट में 420 थी।';
+    const options = stub({ blocks: [{ id: '1', text: 'Annual revenue was 420 in the report.' }] });
+    options.fetchImpl.mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ blocks: [{ id: '1', text: hindi }] }) } }] }) });
+    const result = await runTask('translate', { source: 'Auto-detect', target: 'English', blocks: [{ id: '1', text: hindi }] }, options);
+    expect(result.blocks[0].text).toBe('Annual revenue was 420 in the report.');
+    expect(JSON.parse(options.fetchImpl.mock.calls[1][1].body).messages[0].content).toContain('failed target-language validation');
+    await expect(runTask('translate', { source: 'Auto-detect', target: 'English', blocks: [{ id: '1', text: hindi }] }, stub({ blocks: [{ id: '1', text: hindi }] }))).rejects.toThrow('not returned in English');
+  });
+  it.each(addedLanguages)('supports %s translation, grounded chat and summary language repair', async (language, nativeText) => {
+    const blocks = [{ id: '1', text: 'Revenue was 420.' }];
+    const translation = stub({ blocks: [{ id: '1', text: nativeText }] });
+    expect((await runTask('translate', { source: 'English', target: language, blocks }, translation)).blocks[0].text).toBe(nativeText);
+    await expect(runTask('translate', { source: language, target: 'English', blocks: [{ id: '1', text: nativeText }] }, stub({ blocks }))).resolves.toEqual({ blocks });
+    const answer = { answer: `${nativeText} [p. 2]`, language, supported: true, sources: [{ page: 2, quote: blocks[0].text }] };
+    expect((await runTask('chat', { question: 'What was revenue?', language, sections: [{ page: 2, text: blocks[0].text }] }, stub(answer))).answer).toContain(nativeText);
+    const summary = stub({ text: `${nativeText} [p. 2]` });
+    summary.fetchImpl.mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ text: 'Revenue was 420. [p. 2]' }) } }] }) });
+    const result = await runTask('summarize', { text: '[Page 2] Revenue was 420.', sourcePages: [2], length: 'short', format: 'executive', stage: 'final', language }, summary);
+    expect(result.text).toContain(nativeText);
+    expect(summary.fetchImpl).toHaveBeenCalledTimes(2);
+    const unsupported = await runTask('chat', { question: 'What is missing?', language, sections: [{ page: 2, text: blocks[0].text }] }, stub({ answer: 'Not found.', language, supported: false, sources: [] }));
+    expect(unsupported.sources).toEqual([]);
+    expect(unsupported.answer).not.toMatch(/I could not verify/);
+  });
   it('keeps the requested model server-side and handles missing configuration', async () => {
     const options = stub({ text: 'Result' });
     await complete('Return JSON', {}, options);

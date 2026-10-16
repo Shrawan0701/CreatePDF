@@ -1,12 +1,12 @@
 import { getPdfLib } from './pdfEngine';
 
 export const MM_TO_PT = 72 / 25.4;
-export const PAPER_MM = { A4: [210, 297], Letter: [215.9, 279.4] };
+export const PAPER_MM = { A4: [210, 297], Letter: [215.9, 279.4], '4x6': [101.6, 152.4] };
 
-export function passportLayout({ width, height, paper = 'A4', margin = 10, spacing = 5 }, photos) {
+export function passportLayout({ width, height, paper = 'A4', orientation = 'portrait', margin = 10, spacing = 5, centered = false }, photos) {
   const dimensions = PAPER_MM[paper];
   if (!dimensions || ![width, height, margin, spacing].every(Number.isFinite) || width < 5 || height < 5 || width > 250 || height > 350 || margin < 0 || spacing < 0) throw new Error('Enter photo dimensions of at least 5 mm (up to 250 × 350 mm), with nonnegative margins and spacing.');
-  const [pageWidth, pageHeight] = dimensions;
+  const [pageWidth, pageHeight] = orientation === 'landscape' ? [dimensions[1], dimensions[0]] : dimensions;
   const columns = Math.floor((pageWidth - 2 * margin + spacing + 1e-8) / (width + spacing));
   const rows = Math.floor((pageHeight - 2 * margin + spacing + 1e-8) / (height + spacing));
   if (columns < 1 || rows < 1) throw new Error('The photo does not fit on this paper. Reduce photo size or margins.');
@@ -21,7 +21,37 @@ export function passportLayout({ width, height, paper = 'A4', margin = 10, spaci
       placements.push({ photoIndex, page: Math.floor(index / capacity), x: margin + (cell % columns) * (width + spacing), y: margin + Math.floor(cell / columns) * (height + spacing), width, height });
     }
   });
-  return { pageWidth, pageHeight, pageCount: Math.ceil(total / capacity), columns, rows, placements };
+  if (centered) {
+    const pageCount = Math.ceil(total / capacity);
+    for (let page = 0; page < pageCount; page++) {
+      const pagePlacements = placements.filter(placement => placement.page === page);
+      const usedColumns = Math.min(columns, pagePlacements.length);
+      const usedRows = Math.ceil(pagePlacements.length / columns);
+      const offsetX = (pageWidth - usedColumns * width - (usedColumns - 1) * spacing) / 2 - margin;
+      const offsetY = (pageHeight - usedRows * height - (usedRows - 1) * spacing) / 2 - margin;
+      pagePlacements.forEach(placement => { placement.x += offsetX; placement.y += offsetY; });
+    }
+  }
+  return { pageWidth, pageHeight, pageCount: Math.ceil(total / capacity), columns, rows, capacity, placements };
+}
+
+export function fillPhotoCopies(layout, photos, selectedIndex) {
+  const total = photos.reduce((sum, photo) => sum + photo.copies, 0);
+  const remaining = (layout.capacity - total % layout.capacity) % layout.capacity;
+  return Math.min(100, photos[selectedIndex].copies + remaining, photos[selectedIndex].copies + 500 - total);
+}
+
+export function passportCutGuides(placement, layout, spacing) {
+  const { x, y, width, height } = placement;
+  const tick = Math.min(2, spacing > 0 ? spacing / 2 : .5);
+  const segments = [];
+  const clampX = value => Math.max(0, Math.min(layout.pageWidth, value));
+  const clampY = value => Math.max(0, Math.min(layout.pageHeight, value));
+  for (const edgeX of [x, x + width]) for (const edgeY of [y, y + height]) {
+    segments.push([clampX(edgeX === x ? x - tick : x + width), clampY(edgeY), clampX(edgeX === x ? x : x + width + tick), clampY(edgeY)]);
+    segments.push([clampX(edgeX), clampY(edgeY === y ? y - tick : y + height), clampX(edgeX), clampY(edgeY === y ? y : y + height + tick)]);
+  }
+  return segments;
 }
 
 export function photoCrop(imageWidth, imageHeight, ratio, zoom = 1, x = 50, y = 50) {
@@ -61,11 +91,8 @@ export async function buildPassportSheet(options, photos, onStatus = () => {}) {
     const width = placement.width * MM_TO_PT, height = placement.height * MM_TO_PT;
     page.drawImage(images[placement.photoIndex], { x, y, width, height });
     if (options.guides) {
-      const tick = Math.min(2, options.spacing > 0 ? options.spacing / 2 : .5) * MM_TO_PT;
-      const draw = (x1, y1, x2, y2) => page.drawLine({ start: { x: Math.max(0, x1), y: Math.max(0, y1) }, end: { x: Math.min(page.getWidth(), x2), y: Math.min(page.getHeight(), y2) }, thickness: .3, color: rgb(.35, .35, .35) });
-      for (const cornerX of [x, x + width]) for (const cornerY of [y, y + height]) {
-        draw(cornerX === x ? x - tick : x + width, cornerY, cornerX === x ? x : x + width + tick, cornerY);
-        draw(cornerX, cornerY === y ? y - tick : y + height, cornerX, cornerY === y ? y : y + height + tick);
+      for (const [x1, y1, x2, y2] of passportCutGuides(placement, layout, options.spacing)) {
+        page.drawLine({ start: { x: x1 * MM_TO_PT, y: (layout.pageHeight - y1) * MM_TO_PT }, end: { x: x2 * MM_TO_PT, y: (layout.pageHeight - y2) * MM_TO_PT }, thickness: .3, color: rgb(.35, .35, .35) });
       }
     }
   }

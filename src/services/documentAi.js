@@ -37,19 +37,47 @@ export function packSections(sections, max = 17000) {
 }
 
 export async function summarizeDocument({ pages, length, format, language = 'Same as document', signal, onStatus = () => {}, request = callAi }) {
-  const sections = documentSections(pages, 6500);
-  const sourcePages = [...new Set(pages.filter((page) => page.text.trim()).map((page) => page.page))];
+  const readablePages = pages.filter(page => !page.blank && page.readIssue !== 'unreadable' && page.text.trim());
+  const sections = documentSections(readablePages, 6500);
+  if (!sections.length) throw new Error('No readable content was found for a summary. Try a clearer PDF or scan.');
+  const sourcePages = [...new Set(readablePages.map(page => page.page))];
+  const retryable = error => !signal?.aborted && error.name !== 'AbortError' && !/not configured|key was rejected|quota|billing/i.test(error.message) && (error instanceof TypeError || [408, 429, 500, 502, 503, 504].includes(error.status));
+  const summarize = async body => {
+    for (let attempt = 0; ; attempt++) {
+      signal?.throwIfAborted();
+      try {
+        const response = await request('summarize', body, signal);
+        if (typeof response?.text !== 'string' || !response.text.trim()) throw Object.assign(new Error('No summary was returned.'), { status: 502 });
+        return response;
+      } catch (error) {
+        if (attempt || !retryable(error)) throw error;
+        onStatus('Retrying summary automatically…');
+      }
+    }
+  };
+  const review = async (draft, text) => {
+    if (draft.length > 14000) return draft;
+    onStatus('Reviewing summary…');
+    try { return (await summarize({ text, sourcePages, draft, length, format, stage: 'review', language })).text; }
+    catch (error) { if (retryable(error)) return draft; throw error; }
+  };
+  const completeSource = sections.map(section => `[Page ${section.page}]\n${section.text}`).join('\n\n');
+  if (completeSource.length <= 17000) {
+    onStatus('Creating summary…');
+    const draft = (await summarize({ text: completeSource, sourcePages, length, format, stage: 'final', language })).text;
+    return review(draft, completeSource);
+  }
   const notes = [];
   for (let i = 0; i < sections.length; i++) {
     onStatus(`Summarizing section ${i + 1} of ${sections.length}…`);
     const section = sections[i];
     const original = `[Page ${section.page}]\n${section.text}`;
-    const summary = await request('summarize', { text: original, sourcePages: [section.page], length: sections.length === 1 ? length : 'detailed', format, stage: sections.length === 1 ? 'final' : 'section', language }, signal);
+    const summary = await summarize({ text: original, sourcePages: [section.page], length: sections.length === 1 ? length : 'detailed', format, stage: sections.length === 1 ? 'final' : 'section', language });
     // Source labels are attached by code, so they survive map/reduce even if the model omits them.
     let note = summary.text;
     if (sections.length > 1) {
       onStatus(`Checking section ${i + 1} against its source…`);
-      note = (await request('summarize', { text: original, sourcePages: [section.page], draft: note, length: 'detailed', format, stage: 'review', language }, signal)).text;
+      note = (await summarize({ text: original, sourcePages: [section.page], draft: note, length: 'detailed', format, stage: 'review', language })).text;
     }
     notes.push(`[Page ${section.page}]\n${note}`);
   }
@@ -61,7 +89,7 @@ export async function summarizeDocument({ pages, length, format, language = 'Sam
     for (let i = 0; i < groups.length; i++) {
       onStatus(`Combining summary groups: ${i + 1} of ${groups.length}…`);
       const groupPages = [...new Set([...groups[i].matchAll(/\[(?:Page\s+|p\.\s*)(\d+)\]/gi)].map((match) => Number(match[1])))].filter((page) => sourcePages.includes(page));
-      next.push((await request('summarize', { text: groups[i], ...(groupPages.length ? { sourcePages: groupPages } : {}), length: 'medium', format, stage: 'combine', language }, signal)).text);
+      next.push((await summarize({ text: groups[i], ...(groupPages.length ? { sourcePages: groupPages } : {}), length: 'medium', format, stage: 'combine', language })).text);
     }
     merged = next;
   }
@@ -70,9 +98,7 @@ export async function summarizeDocument({ pages, length, format, language = 'Sam
   if (sections.length === 1) draft = notes[0].replace(/^\[Page \d+\]\n/, '');
   else {
     onStatus('Writing the final summary…');
-    draft = (await request('summarize', { text: reviewSource, sourcePages, length, format, stage: 'final', language }, signal)).text;
+    draft = (await summarize({ text: reviewSource, sourcePages, length, format, stage: 'final', language })).text;
   }
-  if (draft.length > 14000) throw new Error('The summary is too long to review safely. Try a shorter summary length.');
-  onStatus('AI is reviewing facts, figures, coverage and language…');
-  return (await request('summarize', { text: reviewSource, sourcePages, draft, length, format, stage: 'review', language }, signal)).text;
+  return review(draft, reviewSource);
 }

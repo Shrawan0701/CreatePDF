@@ -139,13 +139,13 @@ async function powerpointToPdf(file, progress) {
   return new Blob([await output.save()], { type: 'application/pdf' })
 }
 
-function ImportTool({ toolId, accept, convert, note }) {
+function ImportTool({ toolId, accept, convert, note, successMessage = 'Conversion completed locally.' }) {
   const { showToast } = useApp(); const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0)
-  const run = async () => { setBusy(true); setProgress(20); try { const result = await convert(file, setProgress); downloadBlob(result.blob, result.name); showToast('Conversion completed locally.', 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
+  const run = async () => { setBusy(true); setProgress(20); try { const result = await convert(file, setProgress); downloadBlob(result.blob, result.name); showToast(successMessage, 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
   return <ToolPage toolId={toolId}><div className="tool-panel"><DropZone accept={accept} onFiles={([selected]) => setFile(selected)}><FileInput size={30} /><div className="drop-zone-title">Choose source document</div><div className="drop-zone-sub">{note}</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => setFile(null)} /></div>}</div>{busy && <ProgressBar value={progress} label="Converting document" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Convert and download</button></ToolPage>
 }
 
-export function WordToPdf() { return <ImportTool toolId="word-to-pdf" accept={['.docx']} note="Keeps supported headings, tables, local images, links, and page breaks." convert={async (file, progress) => ({ blob: await wordToPdf(file, progress), name: file.name.replace(/\.docx$/i, '.pdf') })} /> }
+export function WordToPdf() { return <ImportTool toolId="word-to-pdf" accept={['.docx']} note="Your file is sent to this app’s server and deleted after conversion." successMessage="Office conversion completed." convert={async (file, progress) => ({ blob: await wordToPdf(file, progress), name: file.name.replace(/\.docx$/i, '.pdf') })} /> }
 export function ExcelToPdf() {
   const { showToast } = useApp()
   const [file, setFile] = useState(null)

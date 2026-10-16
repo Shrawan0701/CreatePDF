@@ -17,9 +17,9 @@ export default function ImagesToPdf() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
-  const [pageSize, setPageSize] = useState('A4');
+  const [pageSize, setPageSize] = useState('image');
   const [orientation, setOrientation] = useState('portrait');
-  const [margin, setMargin] = useState(20);
+  const [margin, setMargin] = useState(0);
   const { showToast } = useApp();
 
   const handleFiles = (files) => {
@@ -48,10 +48,10 @@ export default function ImagesToPdf() {
     if (!images.length) return;
     setProcessing(true); setError(null); setProgress(0);
     try {
-      let size = PAGE_SIZES[pageSize] || PAGE_SIZES.A4;
-      if (orientation === 'landscape') size = [size[1], size[0]];
+      let size = pageSize === 'image' ? 'image' : PAGE_SIZES[pageSize];
+      if (pageSize !== 'image' && orientation === 'landscape') size = [size[1], size[0]];
       setProgress(30);
-      const blob = await imagesToPdf(images.map((i) => i.file), { pageSize: size, margin: parseInt(margin) });
+      const blob = await imagesToPdf(images.map((i) => i.file), { pageSize: size, margin: pageSize === 'image' ? 0 : Number(margin) });
       setProgress(90);
       downloadBlob(blob, 'images.pdf');
       setProgress(100);
@@ -95,19 +95,21 @@ export default function ImagesToPdf() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
             <FormGroup label="Page Size">
               <select className="form-select" value={pageSize} onChange={(e) => setPageSize(e.target.value)}>
+                <option value="image">Fit to image (no borders)</option>
                 {Object.keys(PAGE_SIZES).map((s) => <option key={s}>{s}</option>)}
               </select>
             </FormGroup>
             <FormGroup label="Orientation">
-              <select className="form-select" value={orientation} onChange={(e) => setOrientation(e.target.value)}>
+              <select className="form-select" value={orientation} disabled={pageSize === 'image'} onChange={(e) => setOrientation(e.target.value)}>
                 <option value="portrait">Portrait</option>
                 <option value="landscape">Landscape</option>
               </select>
             </FormGroup>
             <FormGroup label="Margin (pt)">
-              <input className="form-input" type="number" min={0} max={100} value={margin} onChange={(e) => setMargin(e.target.value)} />
+              <input className="form-input" type="number" min={0} max={100} value={pageSize === 'image' ? 0 : margin} disabled={pageSize === 'image'} onChange={(e) => setMargin(e.target.value)} />
             </FormGroup>
           </div>
+          <p className="form-hint">{pageSize === 'image' ? 'Each page matches its image, with no added white margins or cropping. Backgrounds already in the image are preserved.' : 'Fixed paper sizes may leave white space when the image has a different shape.'}</p>
         </div>
       )}
 

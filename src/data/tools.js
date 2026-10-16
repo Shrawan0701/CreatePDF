@@ -708,7 +708,7 @@ export const TOOLS = [
   {
     id: 'pdf-translator', name: 'PDF Translator',
     category: TOOL_CATEGORIES.AI, catKey: 'ai',
-    description: 'Translate complete PDFs with OpenAI',
+    description: 'Translate complete PDFs with AI',
     icon: Languages, route: '/pdf-translator',
     keywords: ['translate', 'translator', 'language', 'hindi', 'marathi', 'ocr', 'ai'], accepts: ['application/pdf'],
   },

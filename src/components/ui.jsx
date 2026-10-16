@@ -100,7 +100,7 @@ export function FileItem({ file, onRemove, meta }) {
       </div>
       {onRemove && (
         <div className="file-item-actions">
-          <button className="icon-btn" onClick={onRemove} title="Remove">
+          <button type="button" className="icon-btn" onClick={onRemove} title="Remove" aria-label={`Remove ${file.name}`}>
             <X size={15} />
           </button>
         </div>

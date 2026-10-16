@@ -1,6 +1,20 @@
 import { withPdfDocument, renderPageToCanvas } from './pdfEngine';
+import { ALL_OCR_LANGUAGES, hasReadableText, scanLanguages } from './ocrLanguages';
+import { currencyCandidates, verifyCurrencySymbols } from './ocrCurrency';
 
 export { OCR_LANGUAGES } from '../../shared/languages';
+
+export function isBlankPage(canvas) {
+  const context = canvas.getContext?.('2d');
+  if (!context?.getImageData) return false;
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+  let ink = 0;
+  const threshold = Math.max(12, canvas.width * canvas.height * .00001);
+  for (let offset = 0; offset < data.length; offset += 16) {
+    if (Math.min(data[offset], data[offset + 1], data[offset + 2]) < 235 && ++ink > threshold) return false;
+  }
+  return true;
+}
 
 function layoutLines(items) {
   const lines = [];
@@ -39,49 +53,115 @@ export function layoutBlocks(items) {
   return blocks;
 }
 
-export async function readDocument(file, { ocr = true, forceOcr = false, language = 'eng', onStatus = () => {}, signal } = {}) {
-  let worker;
-  const recognize = async (image) => {
+export async function readDocument(file, { ocr = true, forceOcr = false, language = 'auto', sourceLanguage, onStatus = () => {}, onProgress = () => {}, signal } = {}) {
+  let worker, detector, currencyWorker, workerLanguage;
+  let completedPages = 0, totalPages = 1;
+  const recognize = async (image, hintText = '') => {
     signal?.throwIfAborted();
-    if (!worker) {
-      onStatus('Loading local OCR engine and language data…');
-      const { createWorker } = await import('tesseract.js');
-      worker = await createWorker(language, 1, { errorHandler: () => {}, logger: (event) => { if (event.status === 'recognizing text') onStatus(`Recognizing scanned text: ${Math.round(event.progress * 100)}%`); } });
+    const { createWorker } = await import('tesseract.js');
+    let selected = scanLanguages({ sourceLanguage, language, text: hintText });
+    if (selected === ALL_OCR_LANGUAGES) {
+      onStatus('Detecting document language…');
+      try {
+        if (!detector) {
+          detector = await createWorker('osd', 0, { legacyCore: true, legacyLang: true, errorHandler: () => {} });
+          await detector.setParameters({ min_characters_to_try: '20' });
+        }
+        const detected = await detector.detect(image);
+        if (detected.data.script_confidence >= 1) selected = scanLanguages({ script: detected.data.script });
+      } catch (error) { if (error?.name === 'AbortError') throw error; }
     }
-    const result = await worker.recognize(image);
     signal?.throwIfAborted();
-    return { text: result.data.text, confidence: result.data.confidence };
+    const recognizeWith = async languages => {
+      signal?.throwIfAborted();
+      if (!worker || workerLanguage !== languages) {
+        if (worker) { await worker.terminate(); worker = undefined; }
+        onStatus('Loading local OCR engine and language data…');
+        worker = await createWorker(languages, 1, { errorHandler: () => {}, logger: (event) => { if (event.status === 'recognizing text') { onStatus(`Recognizing scanned text: ${Math.round(event.progress * 100)}%`); onProgress((completedPages + event.progress * .95) / totalPages * 100); } } });
+        workerLanguage = languages;
+      }
+      return worker.recognize(image, {}, { blocks: true });
+    };
+    let result = await recognizeWith(selected);
+    const automatic = language === 'auto' && (!sourceLanguage || sourceLanguage === 'Auto-detect');
+    if (automatic && (result.data.confidence < 75 || !hasReadableText(result.data.text))) {
+      onStatus('Checking scan language…');
+      try {
+        const broad = selected === ALL_OCR_LANGUAGES ? result : await recognizeWith(ALL_OCR_LANGUAGES);
+        if (broad.data.confidence > result.data.confidence) result = broad;
+        const refinedLanguages = scanLanguages({ text: broad.data.text });
+        if (refinedLanguages !== ALL_OCR_LANGUAGES) {
+          const refined = await recognizeWith(refinedLanguages);
+          if (refined.data.confidence > result.data.confidence) result = refined;
+        }
+      } catch (error) { if (error?.name === 'AbortError' || signal?.aborted) throw error; }
+    }
+    signal?.throwIfAborted();
+    if (currencyCandidates(result.data).length) {
+      onStatus('Checking scanned amounts…');
+      try {
+        await verifyCurrencySymbols(image, result.data, { signal, recognize: async (crop, mode) => {
+          if (!currencyWorker) currencyWorker = await createWorker('hin', 1, { errorHandler: () => {} });
+          await currencyWorker.setParameters({ tessedit_pageseg_mode: mode, tessedit_char_whitelist: '₹0123456789.,' });
+          return currencyWorker.recognize(crop, {}, { blocks: true });
+        } });
+      } catch (error) { if (error?.name === 'AbortError' || signal?.aborted) throw error; }
+    }
+    return { text: result.data.text, confidence: result.data.confidence, blocks: result.data.blocks };
   };
   try {
     if (file.type.startsWith('image/')) {
       if (!ocr) throw new Error('Enable OCR to read text from bill images.');
       const { text, confidence } = await recognize(file);
       if (!text.trim()) throw new Error('No readable text was found in this image. Try a sharper, upright image.');
+      onProgress(100);
       return [{ page: 1, text, ocr: true, confidence, blocks: text.split(/\n\s*\n/).filter((s) => s.trim()).map((text) => ({ type: 'paragraph', text })) }];
     }
     if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) throw new Error('Choose a PDF or a supported image.');
     return await withPdfDocument(file, async (pdf, pdfjs) => {
       const pages = [];
+      totalPages = pdf.numPages;
       for (let number = 1; number <= pdf.numPages; number++) {
         signal?.throwIfAborted();
         onStatus(`Reading page ${number} of ${pdf.numPages}…`);
         const page = await pdf.getPage(number);
         const viewport = page.getViewport({ scale: 1 });
         const content = await page.getTextContent();
-        const items = content.items.filter((item) => item.str?.trim()).map((item) => {
+        let items = content.items.filter((item) => item.str?.trim()).map((item) => {
           const matrix = pdfjs.Util.transform(viewport.transform, item.transform);
-          return { text: item.str, x: matrix[4], y: matrix[5], size: Math.max(Math.abs(matrix[3]), 6), width: item.width };
+          const size = Math.max(Math.hypot(matrix[2], matrix[3]), 1);
+          const style = content.styles[item.fontName] || {};
+          return { text: item.str, x: matrix[4], y: matrix[5], size, width: item.width, height: size, top: matrix[5] - size * (style.ascent ?? .8), angle: Math.atan2(matrix[1], matrix[0]), fontFamily: style.fontFamily || '' };
         });
         let blocks = layoutBlocks(items);
         let text = layoutLines(items).map((line) => line.items.map((item) => item.text).join('    ')).join('\n');
-        let usedOcr = false, confidence;
-        if ((forceOcr || text.replace(/\s/g, '').length < 24 || /\uFFFD/.test(text)) && ocr) {
+        let usedOcr = false, confidence, blank = false, readingFailed = false;
+        if ((forceOcr || !hasReadableText(text)) && ocr) {
           onStatus(`OCR for page ${number} of ${pdf.numPages}…`);
-          const canvas = await renderPageToCanvas(pdf, number, Math.min(2, 2400 / Math.max(viewport.width, viewport.height)));
-          try { const scanned = await recognize(canvas); confidence = scanned.confidence; if (forceOcr || scanned.text.trim().length > text.trim().length) { text = scanned.text; blocks = text.split(/\n\s*\n/).filter((s) => s.trim()).map((text) => ({ type: 'paragraph', text })); usedOcr = true; } }
-          finally { canvas.width = canvas.height = 0; }
+          let canvas;
+          try {
+            canvas = await renderPageToCanvas(pdf, number, Math.min(3.5, 4200 / Math.max(viewport.width, viewport.height)));
+            blank = !hasReadableText(text) && isBlankPage(canvas);
+            const hint = text || pages.filter(entry => !entry.ocr).map(entry => entry.text).join('\n').slice(0, 3000);
+            const scanned = blank ? null : await recognize(canvas, hint);
+            if (scanned && hasReadableText(scanned.text) && (forceOcr || !hasReadableText(text))) {
+              confidence = scanned.confidence;
+              text = scanned.text; blocks = text.split(/\n\s*\n/).filter((s) => s.trim()).map((text) => ({ type: 'paragraph', text })); usedOcr = true;
+              const scaleX = viewport.width / canvas.width, scaleY = viewport.height / canvas.height;
+              items = (scanned.blocks || []).flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines.flatMap(line => line.words.filter(word => word.text.trim()).map(word => {
+                const { x0, y0, x1, y1 } = word.bbox;
+                const height = (y1 - y0) * scaleY;
+                const baseline = line.baseline?.y0 ?? line.bbox.y1;
+                return { text: word.text, x: x0 * scaleX, y: baseline * scaleY, top: y0 * scaleY, width: (x1 - x0) * scaleX, height, size: height / .8, angle: 0, fontFamily: word.font_name || '' };
+              }))));
+            }
+          } catch (error) { if (error?.name === 'AbortError' || signal?.aborted) throw error; readingFailed = true; }
+          finally { if (canvas) canvas.width = canvas.height = 0; }
         }
-        pages.push({ page: number, text, blocks, ocr: usedOcr, confidence });
+        const readIssue = blank ? null : !hasReadableText(text) ? 'unreadable' : readingFailed || (usedOcr && confidence < 65) ? 'uncertain' : null;
+        pages.push({ page: number, text, blocks, items, width: viewport.width, height: viewport.height, ocr: usedOcr, confidence, blank, readIssue });
+        completedPages = number;
+        onProgress(completedPages / totalPages * 100);
         page.cleanup();
       }
       if (!pages.some((page) => page.text.trim())) throw new Error('No readable text found. Enable OCR for scanned PDFs or choose a clearer document.');
@@ -90,7 +170,7 @@ export async function readDocument(file, { ocr = true, forceOcr = false, languag
   } catch (error) {
     if (error instanceof Error) throw error;
     throw new Error(`OCR could not read this document: ${String(error)}. Check your connection for the engine/language download and try again.`);
-  } finally { if (worker) await worker.terminate(); }
+  } finally { await Promise.allSettled([worker?.terminate(), detector?.terminate(), currencyWorker?.terminate()]); }
 }
 
 export function blockText(block) { return block.type === 'table' ? block.rows.map((row) => row.join(' | ')).join('\n') : block.text; }

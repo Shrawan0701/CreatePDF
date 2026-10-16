@@ -31,8 +31,9 @@ try {
   console.log('Missing-key API response checked.');
 
   await open('invoice-extractor', 'Purchase Bill / Invoice Extractor');
-  await page.getByLabel('OCR language', { exact: true }).waitFor();
-  for (const code of ['eng', 'hin', 'mar', 'spa', 'fra', 'deu', 'por', 'ita', 'eng+spa', 'eng+hin+mar']) assert.equal(await page.getByLabel('OCR language', { exact: true }).locator(`option[value="${code}"]`).count(), 1, `Missing OCR option: ${code}`);
+  await page.locator('.document-settings summary').click();
+  await page.getByLabel('Scan language', { exact: true }).waitFor();
+  for (const code of ['eng', 'hin', 'mar', 'ben', 'tam', 'tel', 'kan', 'guj', 'spa', 'fra', 'deu', 'por', 'ita', 'eng+ben', 'eng+tam', 'eng+tel', 'eng+kan', 'eng+guj', 'eng+spa', 'eng+hin+mar']) assert.equal(await page.getByLabel('Scan language', { exact: true }).locator(`option[value="${code}"]`).count(), 1, `Missing OCR option: ${code}`);
   const invoice = await makePdf([['Supplier: Acme Papers', 'Supplier Address: Pune', 'Invoice No: INV-45', 'Date: 16/10/2026', 'GSTIN: 27ABCDE1234F1Z5', 'Currency: INR', 'Description    Qty    Price    Amount', 'Paper    2    100.00    200.00', 'Subtotal: 200.00', 'Discount: 0', 'CGST 9%: 18.00', 'SGST 9%: 18.00', 'IGST: 0', 'Grand Total: 236.00']]);
   await page.locator('input[type=file]').setInputFiles(invoice);
   await page.getByRole('button', { name: 'Extract bill details' }).click();
@@ -70,7 +71,7 @@ try {
     const scannedPage = spanishPdf.addPage([595, 842]);
     scannedPage.drawImage(spanishImage, { x: 0, y: 0, width: 595, height: 842 });
     scannedPage.drawText('This incorrect text layer must be replaced by OCR.', { x: 20, y: 20, size: 10, opacity: 0 });
-    await page.getByLabel('OCR language', { exact: true }).selectOption('spa');
+    await page.getByLabel('Scan language', { exact: true }).selectOption('spa');
     await page.getByLabel('Rescan every page', { exact: false }).check();
     await page.locator('input[type=file]').setInputFiles({ name: 'spanish-scan.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await spanishPdf.save()) });
     await page.getByRole('button', { name: 'Extract bill details' }).click();
@@ -78,6 +79,24 @@ try {
     assert.match(await page.getByLabel('Invoice number', { exact: true }).inputValue(), /SPA-123/);
     assert.ok((await page.locator('.document-raw pre').textContent()).includes('Factura'));
     console.log('Spanish OCR and rescanning a PDF with an incorrect text layer passed.');
+
+    const currencyData = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 1800; canvas.height = 1200;
+      const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#111'; context.font = '40px monospace';
+      ['Supplier: Currency Test', 'Invoice No: INR-123', 'Description    Qty    Amount', 'Biryani         1    ₹1.00', 'Paneer          2    ₹398.00', 'Subtotal: ₹399.00', 'Grand Total: ₹399.00', 'Reference amount: 3399.00'].forEach((line, index) => context.fillText(line, 80, 140 + index * 95));
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    await page.getByLabel('Scan language', { exact: true }).selectOption('auto');
+    await page.getByLabel('Rescan every page', { exact: false }).uncheck();
+    await page.locator('input[type=file]').setInputFiles({ name: 'currency-scan.png', mimeType: 'image/png', buffer: Buffer.from(currencyData, 'base64') });
+    await page.getByRole('button', { name: 'Extract bill details' }).click();
+    await page.getByRole('heading', { name: 'Review extracted details' }).waitFor({ timeout: 180000 });
+    assert.equal(await page.getByLabel('Grand total', { exact: true }).inputValue(), '399');
+    const currencyText = await page.locator('.document-raw pre').textContent();
+    assert.match(currencyText, /Paneer\s+2\s+₹?398\.00/);
+    assert.match(currencyText, /Reference amount:\s*3399\.00/);
+    console.log('Scanned rupee amounts and genuine leading numeric digits passed.');
   }
   await open('photo-to-passport', 'Photo to Passport Sheet');
   await page.locator('input[type=file]').setInputFiles([image, { ...image, name: 'second.png' }]);
@@ -100,7 +119,10 @@ try {
   await page.getByRole('button', { name: 'Translate entire PDF' }).click();
   await page.getByRole('button', { name: 'Download PDF', exact: true }).waitFor({ timeout: 30000 });
   const translation = await PDFDocument.load(await download('Download PDF'));
-  assert.ok(translation.getPageCount() >= 2); assert.ok(translated.some((block) => block.text.includes('420 million')));
+  assert.equal(translation.getPageCount(), 2);
+  const sourceDocument = await PDFDocument.load(doc.buffer);
+  translation.getPages().forEach((sheet, index) => assert.deepEqual(sheet.getSize(), sourceDocument.getPage(index).getSize()));
+  assert.ok(translated.some((block) => block.text.includes('420 million')));
   assert.ok(translated.some((block) => block.text.includes('stationery')));
   console.log('Translation page coverage, Unicode PDF generation and preview passed using API fixtures.');
 
@@ -126,6 +148,8 @@ try {
   await open('chat-with-pdf', 'Chat with PDF');
   await page.getByLabel('Answer language', { exact: true }).selectOption('Marathi');
   await page.locator('input[type=file]').setInputFiles(doc);
+  await page.getByText('Ready to chat · PDF prepared', { exact: true }).waitFor();
+  assert.equal(chatCalls.length, 0);
   await page.getByLabel('Your question').fill('What was annual revenue?');
   await page.getByRole('button', { name: 'Ask document' }).click();
   await page.locator('.document-citation').waitFor();
@@ -134,6 +158,9 @@ try {
   await page.getByLabel('Your question').fill('How much did it grow?');
   await page.getByRole('button', { name: 'Ask document' }).click();
   await page.waitForFunction(() => document.querySelectorAll('.document-message').length === 4);
+  assert.match(await page.locator('.document-message.user').first().textContent(), /How much did it grow/);
+  assert.match(await page.locator('.document-message.user').last().textContent(), /What was annual revenue/);
+  assert.equal(await page.getByRole('progressbar', { name: 'Document progress' }).count(), 0);
   assert.equal(chatCalls[1].history.length, 2);
   assert.equal(chatCalls[0].language, 'Marathi');
   assert.equal(chatCalls[0].sections[0].page, 2);
