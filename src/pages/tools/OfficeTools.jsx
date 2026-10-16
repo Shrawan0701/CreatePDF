@@ -139,13 +139,14 @@ async function powerpointToPdf(file, progress) {
   return new Blob([await output.save()], { type: 'application/pdf' })
 }
 
-function ImportTool({ toolId, accept, convert, note, successMessage = 'Conversion completed locally.' }) {
-  const { showToast } = useApp(); const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0)
-  const run = async () => { setBusy(true); setProgress(20); try { const result = await convert(file, setProgress); downloadBlob(result.blob, result.name); showToast(successMessage, 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId={toolId}><div className="tool-panel"><DropZone accept={accept} onFiles={([selected]) => setFile(selected)}><FileInput size={30} /><div className="drop-zone-title">Choose source document</div><div className="drop-zone-sub">{note}</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => setFile(null)} /></div>}</div>{busy && <ProgressBar value={progress} label="Converting document" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Convert and download</button></ToolPage>
+function ImportTool({ toolId, accept, convert, note, retainDownload = false, successMessage = 'Conversion completed locally.' }) {
+  const { showToast } = useApp(); const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0); const [result, setResult] = useState(null)
+  const choose = (selected) => { if (busy) return; setFile(selected); setResult(null) }
+  const run = async () => { setBusy(true); setResult(null); setProgress(20); try { const converted = await convert(file, setProgress); if (retainDownload) setResult(converted); downloadBlob(converted.blob, converted.name); showToast(successMessage, 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
+  return <ToolPage toolId={toolId}><div className="tool-panel"><DropZone accept={accept} onFiles={([selected]) => choose(selected)}><FileInput size={30} /><div className="drop-zone-title">Choose source document</div><div className="drop-zone-sub">{note}</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => choose(null)} /></div>}</div>{busy && <ProgressBar value={progress} label="Converting document" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Convert and download</button>{result && <div className="tool-panel" style={{ marginTop: 16 }}><p role="status">Your PDF is ready. If it did not download automatically, tap below to save it.</p><button className="btn btn-primary" onClick={() => downloadBlob(result.blob, result.name)}><Download size={17} /> Download PDF</button></div>}</ToolPage>
 }
 
-export function WordToPdf() { return <ImportTool toolId="word-to-pdf" accept={['.docx']} note="Your file is sent to this app’s server and deleted after conversion." successMessage="Office conversion completed." convert={async (file, progress) => ({ blob: await wordToPdf(file, progress), name: file.name.replace(/\.docx$/i, '.pdf') })} /> }
+export function WordToPdf() { return <ImportTool toolId="word-to-pdf" accept={['.docx']} note="Your file is sent to this app’s server and deleted after conversion." retainDownload successMessage="Office conversion completed." convert={async (file, progress) => ({ blob: await wordToPdf(file, progress), name: file.name.replace(/\.docx$/i, '.pdf') })} /> }
 export function ExcelToPdf() {
   const { showToast } = useApp()
   const [file, setFile] = useState(null)

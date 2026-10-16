@@ -52,12 +52,12 @@ describe('native Word conversion', () => {
     expect(res.headers).toMatchObject({ 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' })
     expect(res.body).toEqual(pdf)
   })
-  it('reports missing native engines without returning an approximate PDF', async () => {
+  it('reports conversion failures without returning an invalid PDF', async () => {
     const request = Readable.from([await fixture()]); request.method = 'POST'; request.headers = {}
     const res = response()
     await createWordPdfHandler({ convert: async () => { throw new Error('ENOENT') } })(request, res)
     expect(res.statusCode).toBe(503)
-    expect(JSON.parse(res.body).error).toContain('No approximate PDF was generated')
+    expect(JSON.parse(res.body).error).toContain('could not process this document')
   })
   it('rejects oversized uploads and unsupported methods', async () => {
     for (const [method, headers, status] of [['GET', {}, 405], ['POST', { 'content-length': 40 * 1024 * 1024 }, 413]]) {

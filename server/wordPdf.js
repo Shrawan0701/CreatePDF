@@ -14,6 +14,10 @@ const failure = (message, status = 422) => Object.assign(new Error(message), { s
 // Run an actual Office layout engine; HTML renderers cannot reproduce Word's
 // grouped drawings, floating anchors, VML, section layout or pagination.
 export async function exportOfficePdf(input, directory, { platform = process.platform, run = execute, env = process.env } = {}) {
+  if (env.WORD_PDF_ENGINE === 'wasm' || (env.VERCEL && !env.LIBREOFFICE_PATH && env.WORD_PDF_ENGINE !== 'libreoffice')) {
+    const { exportWasmPdf } = await import('./wordWasm.js')
+    return exportWasmPdf(await readFile(input))
+  }
   const output = join(directory, 'document.pdf')
   const options = { timeout: 120000, windowsHide: true, maxBuffer: 1024 * 1024 }
   if (platform === 'win32' && env.WORD_PDF_ENGINE !== 'libreoffice') {
@@ -81,9 +85,10 @@ export function createWordPdfHandler({ convert, env = process.env } = {}) {
       response.setHeader('Content-Disposition', 'attachment; filename="document.pdf"')
       response.end(pdf)
     } catch (error) {
+      if (!error.status) console.error('Word PDF conversion failed:', error)
       response.statusCode = error.status || 503
       response.setHeader('Content-Type', 'application/json')
-      response.end(JSON.stringify({ error: error.status ? error.message : 'Word conversion requires Microsoft Word on the Windows server, or LibreOffice with WORD_PDF_ENGINE=libreoffice and LIBREOFFICE_PATH configured. No approximate PDF was generated.' }))
+      response.end(JSON.stringify({ error: error.status ? error.message : 'The Word conversion engine could not process this document. Please try again. If it keeps failing, check the conversion function logs.' }))
     }
   }
 }

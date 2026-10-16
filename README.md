@@ -20,12 +20,13 @@ The optional production server listens on `PORT` (default `4173`), serves the sa
 
 ## Word-to-PDF layout fidelity
 
-Word conversion uses `POST /api/word-to-pdf` and a native Office engine instead of rebuilding DOCX pages in HTML. This retains floating logos, grouped drawings, VML artwork, headers, footers, borders and Word pagination. Files are processed in a temporary server directory and removed after each request. The tool explains this upload before conversion; other browser-based tools remain local.
+Word conversion uses `POST /api/word-to-pdf` and an Office layout engine instead of rebuilding DOCX pages in HTML. Files are processed in a temporary server directory and removed after each request. The tool explains this upload before conversion; other browser-based tools remain local.
 
 - On Windows, local development uses installed Microsoft Word through its PDF export API. Restart `npm run dev` after updating the backend. Word must be installed and activated for the account running the app.
 - On Linux/macOS hosting, install LibreOffice and the document fonts. Set `LIBREOFFICE_PATH` if `soffice` is not on PATH. To choose LibreOffice on Windows, also set `WORD_PDF_ENGINE=libreoffice`. Each conversion gets its own LibreOffice profile. Word and LibreOffice can differ on some Word-specific features; Microsoft Word gives the closest match to the Word original.
-- Both Vite development and `npm start` expose the conversion endpoint. Standard Vercel functions do not include an Office engine: run this route on an Office-equipped host before enabling Word conversion there. Missing engines return a configuration error, without silently producing an approximate PDF.
-- Requests accept DOCX files up to 32 MB. Native export has a two-minute process timeout and jobs are serialized. Desktop Word automation is intended for local Windows use; hosted workloads should use an isolated LibreOffice conversion worker.
+- Vercel automatically uses the bundled LibreOffice WebAssembly engine on the server. No Docker, system Office installation, external API key, or browser engine download is needed. `vercel.json` includes its runtime assets and worker in the conversion function. Redeploy after installing dependencies; no new environment variables are required. Remove an old `WORD_PDF_ENGINE=libreoffice` setting if one was previously configured without a system installation.
+- Set `WORD_PDF_ENGINE=wasm` to exercise the same bundled engine locally with either Vite or `npm start`. Windows otherwise continues to use Microsoft Word. LibreOffice preserves document layout, including floating images and page breaks, but fonts and some Word-specific features can differ from Microsoft Word's export.
+- Requests accept DOCX files up to 32 MB on self-hosted servers; Vercel's function payload limit also applies on Vercel. Native export has a two-minute process timeout; bundled export stops at 110 seconds. Jobs are serialized and the bundled worker is destroyed after each request to release memory. Desktop Word automation is intended for local Windows use.
 
 ## OpenAI configuration and Vercel deployment
 
