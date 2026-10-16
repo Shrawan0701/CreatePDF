@@ -4,13 +4,7 @@
   "functions": {
     "api/word-to-pdf.js": {
       "maxDuration": 120,
-      "includeFiles": [
-        "node_modules/@matbee/libreoffice-converter/package.json",
-        "node_modules/@matbee/libreoffice-converter/dist/node.worker.cjs",
-        "node_modules/@matbee/libreoffice-converter/wasm/*.cjs",
-        "node_modules/@matbee/libreoffice-converter/wasm/*.wasm",
-        "node_modules/@matbee/libreoffice-converter/wasm/*.data"
-      ]
+      "includeFiles": "node_modules/@matbee/libreoffice-converter/{package.json,dist/node.worker.cjs,wasm/*.{cjs,wasm,data}}"
     },
     "api/*.js": {
       "maxDuration": 120
