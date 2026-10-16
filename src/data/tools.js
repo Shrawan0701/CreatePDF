@@ -8,18 +8,19 @@ import {
   Presentation, Globe, FilePlus, AlignJustify, User, Table, BookMarked,
   Image, FileType, Tags, Lock, Unlock, Eye, Zap,
   Share2, Pencil, Receipt, BarChart3, Blend, SplitSquareHorizontal,
-  ChevronDown
+  ChevronDown, Languages, MessageSquare, NotebookPen, Contact
 } from 'lucide-react';
 
 export const TOOL_CATEGORIES = {
-  SCAN_WORKFLOW: 'Scan & Workflow',
-  PAGE_MANAGEMENT: 'Page Management',
-  EDIT_ANNOTATE: 'Edit & Annotate',
+  AI: 'AI Tools',
   CREATE_PDF: 'Create & Convert to PDF',
   CONVERT_FROM: 'Convert to Other',
+  PAGE_MANAGEMENT: 'Page Management',
+  EDIT_ANNOTATE: 'Edit & Annotate',
   SECURITY: 'Security & Privacy',
   BUSINESS: 'Business',
   COLLABORATE: 'Collaborate & Share',
+  SCAN_WORKFLOW: 'Scan & Workflow',
 };
 
 export const TOOLS = [
@@ -383,6 +384,13 @@ export const TOOLS = [
     accepts: ['image/*'],
   },
   {
+    id: 'photo-to-passport', name: 'Photo to Passport Sheet',
+    category: TOOL_CATEGORIES.CREATE_PDF, catKey: 'create',
+    description: 'Crop photos and print exact-size passport sheets on A4 or Letter paper',
+    icon: Contact, route: '/photo-to-passport',
+    keywords: ['passport', 'photo', 'sheet', '35x45', '2x2', 'print', 'crop', 'id'], accepts: ['image/*'],
+  },
+  {
     id: 'excel-to-pdf',
     name: 'Excel to PDF',
     category: TOOL_CATEGORIES.CREATE_PDF,
@@ -664,6 +672,14 @@ export const TOOLS = [
     accepts: [],
   },
 
+  {
+    id: 'invoice-extractor', name: 'Purchase Bill / Invoice Extractor',
+    category: TOOL_CATEGORIES.BUSINESS, catKey: 'business',
+    description: 'Extract and review bill details, line items and GST; export CSV or JSON',
+    icon: Receipt, route: '/invoice-extractor',
+    keywords: ['purchase', 'bill', 'invoice', 'extract', 'gst', 'cgst', 'sgst', 'igst', 'ocr', 'receipt'], accepts: ['application/pdf', 'image/*'],
+  },
+
   // === COLLABORATE & SHARE ===
   {
     id: 'p2p-share',
@@ -686,6 +702,29 @@ export const TOOLS = [
     route: '/whiteboard',
     keywords: ['whiteboard', 'draw', 'collaborate', 'canvas', 'sketch'],
     accepts: [],
+  },
+
+  // === AI TOOLS ===
+  {
+    id: 'pdf-translator', name: 'PDF Translator',
+    category: TOOL_CATEGORIES.AI, catKey: 'ai',
+    description: 'Translate complete PDFs with OpenAI',
+    icon: Languages, route: '/pdf-translator',
+    keywords: ['translate', 'translator', 'language', 'hindi', 'marathi', 'ocr', 'ai'], accepts: ['application/pdf'],
+  },
+  {
+    id: 'chat-with-pdf', name: 'Chat with PDF',
+    category: TOOL_CATEGORIES.AI, catKey: 'ai',
+    description: 'Ask questions about your document with verified source page references',
+    icon: MessageSquare, route: '/chat-with-pdf',
+    keywords: ['chat', 'ask', 'question', 'answer', 'ai', 'source', 'ocr'], accepts: ['application/pdf'],
+  },
+  {
+    id: 'pdf-summarizer', name: 'PDF Summarizer',
+    category: TOOL_CATEGORIES.AI, catKey: 'ai',
+    description: 'Create executive summaries, key points, study notes and chapter summaries',
+    icon: NotebookPen, route: '/pdf-summarizer',
+    keywords: ['summarize', 'summary', 'summarizer', 'notes', 'study', 'chapter', 'ai'], accepts: ['application/pdf'],
   },
 ];
 

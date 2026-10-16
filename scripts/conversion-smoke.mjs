@@ -278,28 +278,13 @@ try {
   if (savedDownload.suggestedFilename() !== receiptDownload.suggestedFilename()) throw new Error('Saved receipt changed bill number')
 
   await browserPage.goto(`${baseUrl}/settings`, { waitUntil: 'networkidle' })
-  const backupDownloadPromise = browserPage.waitForEvent('download')
-  await browserPage.getByRole('button', { name: 'Export app data' }).click()
-  const backupDownload = await backupDownloadPromise
-  const backupPath = join(temp, 'backup.json')
-  await backupDownload.saveAs(backupPath)
-  const backup = JSON.parse(await readFile(backupPath, 'utf8'))
-  if (!backup.stores['pos-products'].some((product) => product.name === '\u0906\u092e') || !backup.stores['pos-bills'].length) throw new Error('Local backup omitted POS records')
-  if (!backup.stores.documents.some((document) => document.name === 'edited-table.pdf' && document.blob?.__createPdfType === 'blob')) throw new Error('Local backup omitted saved PDF bytes')
+  if (await browserPage.getByRole('button', { name: 'Export app data' }).count() || await browserPage.getByText('Import app data', { exact: true }).count() || await browserPage.getByRole('button', { name: 'Keep data on this device' }).count()) throw new Error('Removed settings actions reappeared')
   browserPage.once('dialog', (dialog) => dialog.accept())
   const clearReload = browserPage.waitForEvent('load')
   await browserPage.getByRole('button', { name: 'Clear all local data' }).click()
   await clearReload
   await browserPage.goto(`${baseUrl}/settings`, { waitUntil: 'networkidle' })
-  browserPage.once('dialog', (dialog) => dialog.accept())
-  const restoreReload = browserPage.waitForEvent('load')
-  await browserPage.locator('input[type="file"]').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: await readFile(backupPath) })
-  await restoreReload
-  await browserPage.goto(baseUrl, { waitUntil: 'networkidle' })
-  await browserPage.locator('.saved-document-row').filter({ hasText: 'edited-table.pdf' }).getByRole('link', { name: 'Edit' }).click()
-  await browserPage.locator('.pdf-text-item').getByText('Saved note').waitFor()
-  await browserPage.goto(`${baseUrl}/pos-billing`, { waitUntil: 'networkidle' })
-  await browserPage.getByRole('button', { name: /\u0906\u092e/ }).first().waitFor()
+  if (await browserPage.locator('.settings-document').count()) throw new Error('Clear local data left saved documents behind')
 
   await browserPage.evaluate(() => navigator.serviceWorker.ready)
   await browserPage.context().setOffline(true)
@@ -332,7 +317,7 @@ try {
   await senderPage.close()
   await receiverPage.close()
   if (errors.length) throw new Error(`Browser errors: ${errors.join('; ')}`)
-  process.stdout.write('Word/Excel/CSV/PPTX conversions, PDF editing, page halves, colour modes, thumbmark, rich exports, invoice, POS, backup/restore, offline routes, and P2P transfer validated.\n')
+  process.stdout.write('Word/Excel/CSV/PPTX conversions, PDF editing, page halves, colour modes, thumbmark, rich exports, invoice, POS, data clearing, offline routes, and P2P transfer validated.\n')
 } finally {
   await browser?.close()
   server.kill()

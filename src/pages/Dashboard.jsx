@@ -5,8 +5,9 @@ import { useApp } from '../context/AppContext';
 import { TOOLS, TOOL_CATEGORIES, searchTools } from '../data/tools';
 import { RecentFilesPanel } from '../components/Layout';
 import SavedDocumentsPanel from '../components/SavedDocumentsPanel';
+import { HomeGuide } from '../seo/GuideContent';
 
-const POPULAR = ['merge-pdf', 'compress-pdf', 'edit-pdf', 'sign-pdf'];
+const POPULAR = ['pdf-translator', 'images-to-pdf', 'chat-with-pdf', 'pdf-to-word'];
 const FILTERS = ['All tools', 'Favorites', ...Object.values(TOOL_CATEGORIES)];
 
 export default function Dashboard() {
@@ -41,7 +42,7 @@ export default function Dashboard() {
           return <Link key={id} to={tool.route} className="essential-card"><div className="essential-top"><span className={`essential-icon tone-${i}`}><Icon size={22} strokeWidth={1.6} /></span><ArrowUpRight className="essential-arrow" size={18} /></div><h3>{tool.name}</h3><p>{tool.description}</p></Link>;
         })}</div>
       </section>
-      <div className="local-promise"><div className="promise-icon"><ShieldCheck size={21} /></div><div><strong>Your files. Your device. Your business.</strong><p>Document processing happens in your browser. Your files stay with you.</p></div><span className="local-label"><span className="status-dot" /> LOCAL BY DEFAULT</span></div>
+      <div className="local-promise"><div className="promise-icon"><ShieldCheck size={21} /></div><div><strong>Your files. Your device. Your business.</strong><p>Core PDF tools run on your device. AI tools send extracted text to OpenAI when you use them.</p></div><span className="local-label"><span className="status-dot" /> LOCAL BY DEFAULT</span></div>
       <section id="tools" className="tool-library" aria-labelledby="library-title">
         <div className="library-heading"><div><div className="eyebrow">THE TOOLKIT</div><h2 id="library-title">Small tools. Big possibilities.</h2><p>Everything you need, without the extra steps.</p></div><label className="library-search"><Search size={17} /><input aria-label="Filter tools" placeholder="What do you need to do?" value={query} onChange={e => setQuery(e.target.value)} />{query && <button className="icon-btn" aria-label="Clear search" onClick={() => setQuery('')}><X size={14} /></button>}</label></div>
         <div className="library-filters" role="group" aria-label="Tool categories">{FILTERS.map(filter => <button key={filter} aria-pressed={category === filter} className={category === filter ? 'selected' : ''} onClick={() => setCategory(filter)}>{filter === 'Favorites' && <Star size={13} />}{filter}{filter === 'All tools' && <span>{TOOLS.length}</span>}</button>)}</div>
@@ -52,6 +53,7 @@ export default function Dashboard() {
         })}</div>
         {!results.length && <div className="library-empty"><Search size={26} /><h3>{category === 'Favorites' && !query ? 'Keep your go-to tools close.' : 'No matching tools'}</h3><p>{category === 'Favorites' && !query ? 'Select the star beside any tool to save it here.' : 'Try another search or choose a different category.'}</p><button className="btn btn-secondary" onClick={() => { setQuery(''); setCategory('All tools'); }}>View all tools</button></div>}
       </section>
+      <HomeGuide LinkComponent={Link} />
       <section id="documents" className="documents-section"><div className="eyebrow">PICK UP WHERE YOU LEFT OFF</div><SavedDocumentsPanel /><RecentFilesPanel /></section>
       <footer className="workspace-footer"><Link to="/" className="footer-wordmark">createpdf<span>.si</span></Link><p>A little less busywork. A little more possibility.</p><Link to="/settings">Preferences <ArrowUpRight size={13} /></Link></footer>
     </div>

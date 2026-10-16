@@ -14,10 +14,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
-  if (request.method !== 'GET' || url.origin !== location.origin || url.pathname === '/health' || url.pathname === '/signal') return
+  if (request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname === '/health' || url.pathname === '/signal') return
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(async () => (await caches.open(CACHE_NAME)).match('/')))
+    event.respondWith(fetch(request).catch(async () => {
+      const cache = await caches.open(CACHE_NAME)
+      return (await cache.match(url.pathname)) || cache.match('/')
+    }))
     return
   }
 

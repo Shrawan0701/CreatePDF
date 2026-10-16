@@ -1,0 +1,314 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 120
+    }
+  },
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/index.html",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/:tool/index.html",
+      "destination": "/:tool",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/scan-document",
+      "destination": "/scan-document/index.html"
+    },
+    {
+      "source": "/pdf-workflow",
+      "destination": "/pdf-workflow/index.html"
+    },
+    {
+      "source": "/merge-pdf",
+      "destination": "/merge-pdf/index.html"
+    },
+    {
+      "source": "/alternate-mix",
+      "destination": "/alternate-mix/index.html"
+    },
+    {
+      "source": "/compress-pdf",
+      "destination": "/compress-pdf/index.html"
+    },
+    {
+      "source": "/split-pdf",
+      "destination": "/split-pdf/index.html"
+    },
+    {
+      "source": "/split-by-text",
+      "destination": "/split-by-text/index.html"
+    },
+    {
+      "source": "/split-by-bookmarks",
+      "destination": "/split-by-bookmarks/index.html"
+    },
+    {
+      "source": "/split-in-half",
+      "destination": "/split-in-half/index.html"
+    },
+    {
+      "source": "/split-by-size",
+      "destination": "/split-by-size/index.html"
+    },
+    {
+      "source": "/organize-pages",
+      "destination": "/organize-pages/index.html"
+    },
+    {
+      "source": "/rotate-pdf",
+      "destination": "/rotate-pdf/index.html"
+    },
+    {
+      "source": "/flip-mirror",
+      "destination": "/flip-mirror/index.html"
+    },
+    {
+      "source": "/n-up",
+      "destination": "/n-up/index.html"
+    },
+    {
+      "source": "/crop-resize",
+      "destination": "/crop-resize/index.html"
+    },
+    {
+      "source": "/pdf-to-zip",
+      "destination": "/pdf-to-zip/index.html"
+    },
+    {
+      "source": "/edit-pdf",
+      "destination": "/edit-pdf/index.html"
+    },
+    {
+      "source": "/sign-pdf",
+      "destination": "/sign-pdf/index.html"
+    },
+    {
+      "source": "/pdf-to-handwriting",
+      "destination": "/pdf-to-handwriting/index.html"
+    },
+    {
+      "source": "/thumbmark",
+      "destination": "/thumbmark/index.html"
+    },
+    {
+      "source": "/text-to-handwriting",
+      "destination": "/text-to-handwriting/index.html"
+    },
+    {
+      "source": "/handwriting-to-pdf",
+      "destination": "/handwriting-to-pdf/index.html"
+    },
+    {
+      "source": "/fill-form",
+      "destination": "/fill-form/index.html"
+    },
+    {
+      "source": "/redact-pdf",
+      "destination": "/redact-pdf/index.html"
+    },
+    {
+      "source": "/add-watermark",
+      "destination": "/add-watermark/index.html"
+    },
+    {
+      "source": "/page-numbers",
+      "destination": "/page-numbers/index.html"
+    },
+    {
+      "source": "/bates-numbering",
+      "destination": "/bates-numbering/index.html"
+    },
+    {
+      "source": "/headers-footers",
+      "destination": "/headers-footers/index.html"
+    },
+    {
+      "source": "/flatten-pdf",
+      "destination": "/flatten-pdf/index.html"
+    },
+    {
+      "source": "/invert-colors",
+      "destination": "/invert-colors/index.html"
+    },
+    {
+      "source": "/word-to-pdf",
+      "destination": "/word-to-pdf/index.html"
+    },
+    {
+      "source": "/images-to-pdf",
+      "destination": "/images-to-pdf/index.html"
+    },
+    {
+      "source": "/photo-to-passport",
+      "destination": "/photo-to-passport/index.html"
+    },
+    {
+      "source": "/excel-to-pdf",
+      "destination": "/excel-to-pdf/index.html"
+    },
+    {
+      "source": "/powerpoint-to-pdf",
+      "destination": "/powerpoint-to-pdf/index.html"
+    },
+    {
+      "source": "/html-to-pdf",
+      "destination": "/html-to-pdf/index.html"
+    },
+    {
+      "source": "/create-pdf",
+      "destination": "/create-pdf/index.html"
+    },
+    {
+      "source": "/markdown-to-pdf",
+      "destination": "/markdown-to-pdf/index.html"
+    },
+    {
+      "source": "/resume-builder",
+      "destination": "/resume-builder/index.html"
+    },
+    {
+      "source": "/csv-to-pdf",
+      "destination": "/csv-to-pdf/index.html"
+    },
+    {
+      "source": "/ebook-to-pdf",
+      "destination": "/ebook-to-pdf/index.html"
+    },
+    {
+      "source": "/pdf-to-word",
+      "destination": "/pdf-to-word/index.html"
+    },
+    {
+      "source": "/pdf-to-jpg",
+      "destination": "/pdf-to-jpg/index.html"
+    },
+    {
+      "source": "/edit-metadata",
+      "destination": "/edit-metadata/index.html"
+    },
+    {
+      "source": "/extract-images",
+      "destination": "/extract-images/index.html"
+    },
+    {
+      "source": "/pdf-to-excel",
+      "destination": "/pdf-to-excel/index.html"
+    },
+    {
+      "source": "/pdf-to-ppt",
+      "destination": "/pdf-to-ppt/index.html"
+    },
+    {
+      "source": "/extract-text",
+      "destination": "/extract-text/index.html"
+    },
+    {
+      "source": "/pdf-to-html",
+      "destination": "/pdf-to-html/index.html"
+    },
+    {
+      "source": "/pdf-to-epub",
+      "destination": "/pdf-to-epub/index.html"
+    },
+    {
+      "source": "/encrypt-pdf",
+      "destination": "/encrypt-pdf/index.html"
+    },
+    {
+      "source": "/remove-password",
+      "destination": "/remove-password/index.html"
+    },
+    {
+      "source": "/unlock-pdf",
+      "destination": "/unlock-pdf/index.html"
+    },
+    {
+      "source": "/auto-redact",
+      "destination": "/auto-redact/index.html"
+    },
+    {
+      "source": "/privacy-scanner",
+      "destination": "/privacy-scanner/index.html"
+    },
+    {
+      "source": "/fingerprint",
+      "destination": "/fingerprint/index.html"
+    },
+    {
+      "source": "/gst-invoice",
+      "destination": "/gst-invoice/index.html"
+    },
+    {
+      "source": "/pos-billing",
+      "destination": "/pos-billing/index.html"
+    },
+    {
+      "source": "/invoice-extractor",
+      "destination": "/invoice-extractor/index.html"
+    },
+    {
+      "source": "/p2p-share",
+      "destination": "/p2p-share/index.html"
+    },
+    {
+      "source": "/whiteboard",
+      "destination": "/whiteboard/index.html"
+    },
+    {
+      "source": "/pdf-translator",
+      "destination": "/pdf-translator/index.html"
+    },
+    {
+      "source": "/chat-with-pdf",
+      "destination": "/chat-with-pdf/index.html"
+    },
+    {
+      "source": "/pdf-summarizer",
+      "destination": "/pdf-summarizer/index.html"
+    },
+    {
+      "source": "/settings",
+      "destination": "/settings/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/settings",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, follow"
+        }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,8 @@ try {
   await page.goto(origin, { waitUntil: 'networkidle' });
   await page.locator('.directory-item').last().waitFor();
   assert.equal(await page.locator('.directory-item').count(), TOOLS.length);
+  const switchToDark = page.getByRole('button', { name: 'Switch to dark mode' });
+  if (await switchToDark.count()) await switchToDark.click();
   await page.screenshot({ path: join(tmpdir(), 'createpdf-dark-desktop.png') });
   await page.getByRole('button', { name: 'Switch to light mode' }).click();
   await page.screenshot({ path: join(tmpdir(), 'createpdf-light-desktop.png') });
@@ -58,6 +60,17 @@ try {
   await page.locator('.editor-file').filter({ hasText: 'workspace-test.pdf' }).waitFor();
   await page.goto(origin, { waitUntil: 'networkidle' });
   await page.setViewportSize({ width: 390, height: 844 });
+  const categories = page.getByRole('group', { name: 'Tool categories' });
+  await categories.waitFor({ state: 'visible' });
+  await categories.getByRole('button', { name: 'AI Tools', exact: true }).click();
+  assert.equal(await page.locator('.directory-item').count(), 3);
+  await categories.getByRole('button', { name: 'Business', exact: true }).click();
+  assert.equal(await page.locator('.directory-item').count(), 3);
+  assert.equal(await page.locator('.directory-item').filter({ hasText: 'Purchase Bill / Invoice Extractor' }).count(), 1);
+  await categories.getByRole('button', { name: 'Favorites', exact: true }).click();
+  await page.getByRole('heading', { name: 'Keep your go-to tools close.' }).waitFor();
+  await page.getByRole('button', { name: 'View all tools' }).click();
+  assert.equal(await page.getByRole('button', { name: 'All tools', exact: false }).getAttribute('aria-pressed'), 'true');
   await page.screenshot({ path: join(tmpdir(), 'createpdf-light-mobile.png'), fullPage: true });
   await page.getByRole('button', { name: 'Switch to dark mode' }).click();
   await page.screenshot({ path: join(tmpdir(), 'createpdf-dark-mobile.png'), fullPage: true });

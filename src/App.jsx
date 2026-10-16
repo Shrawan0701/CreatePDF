@@ -1,12 +1,15 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { Database, Download, FileArchive, HardDrive, Pencil, ShieldCheck, Trash2, Upload } from 'lucide-react'
+import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
+import { Database, HardDrive, Pencil, ShieldCheck, Trash2 } from 'lucide-react'
 import { AppProvider, useApp } from './context/AppContext'
 import { Topbar, SearchModal } from './components/Layout'
 import { ToastContainer } from './components/ui'
 import Dashboard from './pages/Dashboard'
+import SeoHead from './components/SeoHead'
+import NotFound from './components/NotFound'
+import { ToolGuide } from './seo/GuideContent'
 import { TOOLS } from './data/tools'
-import { clearAllData, deleteDocument, exportAppData, getDocuments, getStorageEstimate, importAppData, isStoragePersistent, renameDocument, requestPersistentStorage } from './services/storage'
+import { clearAllData, deleteDocument, getDocuments, getStorageEstimate, renameDocument } from './services/storage'
 
 const lazyNamed = (loader, name) => lazy(() => loader().then((module) => ({ default: module[name] })))
 const MergePdf = lazy(() => import('./pages/tools/MergePdf'))
@@ -21,6 +24,9 @@ const PosBilling = lazy(() => import('./pages/tools/PosBilling'))
 const Whiteboard = lazy(() => import('./pages/tools/Whiteboard'))
 const WorkflowBuilder = lazy(() => import('./pages/tools/WorkflowBuilder'))
 const ScanDocument = lazy(() => import('./pages/tools/ScanDocument'))
+const documentAiTools = () => import('./pages/tools/DocumentAiTools')
+const PdfTranslator = lazyNamed(documentAiTools, 'PdfTranslator'), ChatWithPdf = lazyNamed(documentAiTools, 'ChatWithPdf'), PdfSummarizer = lazyNamed(documentAiTools, 'PdfSummarizer'), InvoiceExtractor = lazyNamed(documentAiTools, 'InvoiceExtractor')
+const PassportSheet = lazy(() => import('./pages/tools/PassportSheet'))
 const createTools = () => import('./pages/tools/CreateTools')
 const advancedTools = () => import('./pages/tools/AdvancedPageTools')
 const annotateTools = () => import('./pages/tools/AnnotateTools')
@@ -39,6 +45,11 @@ const AddWatermark = lazyNamed(editTools, 'AddWatermark'), PageNumbers = lazyNam
 const EncryptPdf = lazyNamed(securityTools, 'EncryptPdf'), RemovePassword = lazyNamed(securityTools, 'RemovePassword'), UnlockPdf = lazyNamed(securityTools, 'UnlockPdf'), PrivacyScanner = lazyNamed(securityTools, 'PrivacyScanner'), FingerprintGenerator = lazyNamed(securityTools, 'FingerprintGenerator'), AutoRedact = lazyNamed(securityTools, 'AutoRedact')
 
 export const IMPLEMENTED_TOOLS = {
+  'pdf-translator': PdfTranslator,
+  'chat-with-pdf': ChatWithPdf,
+  'pdf-summarizer': PdfSummarizer,
+  'invoice-extractor': InvoiceExtractor,
+  'photo-to-passport': PassportSheet,
   'scan-document': ScanDocument,
   'pdf-workflow': WorkflowBuilder,
   'merge-pdf': MergePdf,
@@ -115,6 +126,7 @@ function AppShell() {
 
   return (
     <div className="app-shell">
+      <SeoHead pathname={location.pathname} />
       <main className="main-content">
         <Topbar breadcrumbs={currentTool ? [currentTool.category, currentTool.name] : location.pathname === '/settings' ? ['Settings'] : []} />
         {!isOnline && <div className="offline-banner">You are offline. Local PDF tools remain available.</div>}
@@ -126,8 +138,9 @@ function AppShell() {
               const Component = IMPLEMENTED_TOOLS[tool.id]
               return <Route key={tool.id} path={tool.route} element={<Component />} />
             })}
-            <Route path="*" element={<Dashboard />} />
+            <Route path="*" element={<NotFound />} />
           </Routes></Suspense>
+          {currentTool && <ToolGuide tool={currentTool} LinkComponent={Link} />}
         </div>
       </main>
       <SearchModal />
@@ -139,47 +152,14 @@ function AppShell() {
 function Settings() {
   const { theme, setTheme, showToast } = useApp()
   const [storage, setStorage] = useState(null)
-  const [persistent, setPersistent] = useState(false)
   const [documents, setDocuments] = useState([])
 
   const refreshStorage = async () => {
     setStorage(await getStorageEstimate())
-    setPersistent(await isStoragePersistent())
     setDocuments(await getDocuments())
   }
 
   useEffect(() => { refreshStorage() }, [])
-
-  const backup = async () => {
-    const data = await exportAppData()
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `createpdf-backup-${new Date().toISOString().slice(0, 10)}.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
-    showToast('Local data backup downloaded.', 'success')
-  }
-
-  const restore = async (event) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    if (!window.confirm('Replace all current local CreatePDF.si data with this backup?')) return
-    try {
-      await importAppData(JSON.parse(await file.text()))
-      showToast('Backup restored. Reloading application.', 'success')
-      window.setTimeout(() => window.location.reload(), 500)
-    } catch (error) {
-      showToast(error.message, 'error')
-    }
-  }
-
-  const persist = async () => {
-    const granted = await requestPersistentStorage()
-    setPersistent(granted)
-    showToast(granted ? 'Persistent storage enabled.' : 'The browser did not grant persistent storage.', granted ? 'success' : 'warning')
-  }
 
   const clearData = async () => {
     if (!window.confirm('Delete all locally stored CreatePDF.si data on this browser?')) return
@@ -203,13 +183,8 @@ function Settings() {
             <button className={`btn ${theme === 'dark' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTheme('dark')}>Dark</button>
           </div>
         </div>
-        <div className="privacy-card"><ShieldCheck size={22} color="var(--success)" /><div><strong>Local-first by default</strong><p>Ordinary document processing stays in this browser session.</p></div></div>
+        <div className="privacy-card"><ShieldCheck size={22} color="var(--success)" /><div><strong>Local-first by default</strong><p>Ordinary document processing stays on your device. Translation, chat, summaries and optional AI invoice extraction send extracted text to OpenAI.</p></div></div>
         <div className="privacy-card"><HardDrive size={22} color="var(--primary)" /><div><strong>Browser storage</strong><p>{storage ? `${Math.round((storage.usage || 0) / 1048576)} MB used of ${Math.round((storage.quota || 0) / 1048576)} MB available.` : 'Saved projects and preferences use IndexedDB.'}</p></div></div>
-        <div className="settings-actions">
-          <button className="btn btn-secondary" onClick={backup}><Download size={16} /> Export app data</button>
-          <label className="btn btn-secondary"><Upload size={16} /> Import app data<input type="file" accept="application/json,.json" hidden onChange={restore} /></label>
-          <button className="btn btn-secondary" disabled={persistent} onClick={persist}><FileArchive size={16} /> {persistent ? 'Storage is persistent' : 'Keep data on this device'}</button>
-        </div>
         {documents.length > 0 && <div className="settings-documents"><h2 className="tool-panel-title">Saved documents</h2>{documents.map((document) => <div className="settings-document" key={document.id}><div><strong>{document.name}</strong><small>{new Date(document.savedAt).toLocaleString()} · {Math.max(1, Math.round((document.blob?.size || 0) / 1024))} KB</small></div><button className="icon-btn" aria-label="Rename document" onClick={async () => { const name = window.prompt('Document name', document.name); if (!name) return; await renameDocument(document.id, name); await refreshStorage() }}><Pencil size={15} /></button><button className="icon-btn" aria-label="Delete document" onClick={async () => { await deleteDocument(document.id); await refreshStorage() }}><Trash2 size={15} /></button></div>)}</div>}
         <button className="btn btn-danger" onClick={clearData}><Trash2 size={16} /> Clear all local data</button>
       </div>
