@@ -8,6 +8,14 @@ vi.mock('@matbee/libreoffice-converter/server', () => ({ WorkerConverter: class 
 import { createWasmExporter } from './wordWasm.js'
 afterEach(() => { vi.resetAllMocks(); vi.useRealTimers() })
 describe('bundled Office engine', () => {
+  it('loads presentations as PPTX instead of treating them as Word documents', async () => {
+    const exportPdf = createWasmExporter()
+    const bytes = Buffer.from('original PPTX')
+    engine.convert.mockResolvedValue({ data: Buffer.from('%PDF-1.7\nfixture') })
+    await exportPdf(bytes, () => {}, 'document.pptx')
+    expect(engine.convert).toHaveBeenCalledWith(bytes, { outputFormat: 'pdf' }, 'document.pptx')
+    await exportPdf.destroy()
+  })
   it('reuses an initialized engine and passes original bytes for consecutive documents', async () => {
     const exportPdf = createWasmExporter()
     const bytes = Buffer.from('original DOCX')

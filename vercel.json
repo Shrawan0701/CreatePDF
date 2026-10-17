@@ -2,7 +2,15 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
+    "api/html-to-pdf.js": {
+      "maxDuration": 120,
+      "includeFiles": "node_modules/@sparticuz/chromium/bin/**"
+    },
     "api/word-to-pdf.js": {
+      "maxDuration": 120,
+      "includeFiles": "{server/wordWasm.worker.mjs,node_modules/@matbee/libreoffice-converter/{package.json,wasm/*.{cjs,wasm,data}}}"
+    },
+    "api/powerpoint-to-pdf.js": {
       "maxDuration": 120,
       "includeFiles": "{server/wordWasm.worker.mjs,node_modules/@matbee/libreoffice-converter/{package.json,wasm/*.{cjs,wasm,data}}}"
     },

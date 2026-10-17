@@ -1,7 +1,8 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createHandler } from './server/ai.js'
-import { createWordPdfHandler } from './server/wordPdf.js'
+import { createWordPdfHandler, createPowerpointPdfHandler } from './server/wordPdf.js'
+import { createHtmlPdfHandler } from './server/htmlPdf.js'
 
 export default defineConfig({
   plugins: [react(), {
@@ -9,9 +10,13 @@ export default defineConfig({
     configureServer(server) {
       const env = loadEnv(server.config.mode, server.config.root, '')
       const wordPdf = createWordPdfHandler({ env: { ...env, ...process.env } })
+      const powerpointPdf = createPowerpointPdfHandler({ env: { ...env, ...process.env } })
+      const htmlPdf = createHtmlPdfHandler()
       server.middlewares.use('/api', (req, res) => {
         const task = req.url?.split('?')[0].replace(/^\//, '')
         if (task === 'word-to-pdf') return wordPdf(req, res)
+        if (task === 'powerpoint-to-pdf') return powerpointPdf(req, res)
+        if (task === 'html-to-pdf') return htmlPdf(req, res)
         if (!['translate', 'chat', 'summarize', 'invoice'].includes(task)) {
           res.statusCode = 404; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Unknown API endpoint.' })); return
         }

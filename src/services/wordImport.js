@@ -47,29 +47,32 @@ async function readConversion(response, progress) {
   }
 }
 
-export async function wordToPdf(file, progress = () => {}) {
+async function officeToPdf(file, progress = () => {}, presentation = false) {
+  const kind = presentation ? 'powerpoint' : 'word'
+  const extension = presentation ? 'PPTX' : 'DOCX'
+  const streamType = `application/vnd.createpdf.${kind}-stream`
   progress(null, 'Uploading document')
   // Older iOS Safari versions support AbortController but not
   // AbortSignal.timeout. Keep the same endpoint and conversion engine.
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 180000)
   try {
-    const response = await fetch('/api/word-to-pdf', {
+    const response = await fetch(`/api/${kind}-to-pdf`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Accept': 'application/vnd.createpdf.word-stream, application/pdf',
+        'Content-Type': presentation ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Accept': `${streamType}, application/pdf`,
       },
       body: file,
       signal: controller.signal,
     })
     if (!response.ok) {
       const result = await response.json().catch(() => null)
-      throw new Error(result?.error || (response.status === 413 ? 'This document exceeds the upload limit. Please choose a smaller DOCX.' : 'The conversion service is temporarily unavailable. Please try again.'))
+      throw new Error(result?.error || (response.status === 413 ? `This document exceeds the upload limit. Please choose a smaller ${extension}.` : 'The conversion service is temporarily unavailable. Please try again.'))
     }
     const contentType = response.headers.get('content-type') || ''
     let blob
-    if (contentType.includes('application/vnd.createpdf.word-stream')) blob = await readConversion(response, progress)
+    if (contentType.includes(streamType)) blob = await readConversion(response, progress)
     else if (contentType.includes('application/pdf')) {
       progress(null, 'Downloading PDF')
       blob = await response.blob()
@@ -83,3 +86,6 @@ export async function wordToPdf(file, progress = () => {}) {
     throw error
   } finally { clearTimeout(timeout) }
 }
+
+export const wordToPdf = (file, progress) => officeToPdf(file, progress)
+export const powerpointToPdf = (file, progress) => officeToPdf(file, progress, true)

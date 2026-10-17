@@ -20,7 +20,7 @@ export function createWasmExporter() {
     }
     await old.destroy()
   }
-  const run = async (bytes, progress) => {
+  const run = async (bytes, progress, filename) => {
     let timer
     try {
       return await Promise.race([
@@ -36,7 +36,7 @@ export function createWasmExporter() {
             converter.worker?.unref()
           }
           progress('Converting document')
-          const result = await converter.convert(bytes, { outputFormat: 'pdf' }, 'document.docx')
+          const result = await converter.convert(bytes, { outputFormat: 'pdf' }, filename)
           const pdf = Buffer.from(result.data)
           if (pdf.subarray(0, 5).toString() !== '%PDF-') throw new Error('LibreOffice returned an invalid PDF.')
           jobs++
@@ -51,8 +51,8 @@ export function createWasmExporter() {
       throw error
     } finally { clearTimeout(timer) }
   }
-  const exportPdf = (bytes, progress = () => {}) => {
-    const job = pending.then(() => run(bytes, progress))
+  const exportPdf = (bytes, progress = () => {}, filename = 'document.docx') => {
+    const job = pending.then(() => run(bytes, progress, filename))
     pending = job.catch(() => {})
     return job
   }

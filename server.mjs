@@ -3,7 +3,8 @@ import { createServer } from 'node:http'
 import { resolve } from 'node:path'
 import { WebSocketServer } from 'ws'
 import { createHandler } from './server/ai.js'
-import { createWordPdfHandler } from './server/wordPdf.js'
+import { createWordPdfHandler, createPowerpointPdfHandler } from './server/wordPdf.js'
+import { createHtmlPdfHandler } from './server/htmlPdf.js'
 import { APP_PATHS } from './src/seo/metadata.js'
 
 try { process.loadEnvFile('.env.local') } catch (error) { if (error.code !== 'ENOENT') throw error }
@@ -16,6 +17,8 @@ const dist = resolve('dist')
 
 app.disable('x-powered-by')
 app.all('/api/word-to-pdf', createWordPdfHandler())
+app.all('/api/powerpoint-to-pdf', createPowerpointPdfHandler())
+app.all('/api/html-to-pdf', createHtmlPdfHandler())
 for (const task of ['translate', 'chat', 'summarize', 'invoice']) app.all(`/api/${task}`, createHandler(task))
 app.use('/api', (_request, response) => response.status(404).json({ error: 'Unknown API endpoint.' }))
 app.get('/index.html', (_request, response) => response.redirect(308, '/'))

@@ -4,7 +4,7 @@ import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import JSZip from 'jszip'
-import { convertWordDocument, createWordPdfHandler, exportOfficePdf } from './wordPdf'
+import { convertWordDocument, convertOfficeDocument, createWordPdfHandler, createPowerpointPdfHandler, exportOfficePdf } from './wordPdf'
 
 const pdf = Buffer.from('%PDF-1.7\nfixture')
 const fixture = async () => { const zip = new JSZip(); zip.file('word/document.xml', '<document/>'); return zip.generateAsync({ type: 'nodebuffer' }) }
@@ -88,5 +88,52 @@ describe('native Word conversion', () => {
       await createWordPdfHandler()(request, res)
       expect(res.statusCode).toBe(status)
     }
+  })
+})
+
+describe('PowerPoint conversion', () => {
+  it('keeps the original presentation package and cleans its temporary copy', async () => {
+    const zip = new JSZip()
+    zip.file('ppt/presentation.xml', '<presentation/>')
+    zip.file('ppt/slideMasters/slideMaster1.xml', '<master/>')
+    const bytes = await zip.generateAsync({ type: 'nodebuffer' })
+    let temporary
+    const result = await convertOfficeDocument(bytes, { format: 'pptx', exporter: async (path, directory) => {
+      temporary = directory
+      expect(path.endsWith('document.pptx')).toBe(true)
+      expect(await readFile(path)).toEqual(bytes)
+      return pdf
+    } })
+    expect(result).toEqual(pdf)
+    await expect(access(temporary)).rejects.toThrow()
+  })
+  it('rejects invalid presentations and DOCX files before rendering', async () => {
+    const exporter = vi.fn()
+    for (const bytes of [Buffer.from('invalid'), await fixture()]) {
+      await expect(convertOfficeDocument(bytes, { format: 'pptx', exporter })).rejects.toMatchObject({ status: 400 })
+    }
+    expect(exporter).not.toHaveBeenCalled()
+  })
+  it.each(['win32', 'linux'])('uses the Impress PDF filter when native LibreOffice is selected on %s', async platform => {
+    const directory = await mkdtemp(join(tmpdir(), 'pptx-test-'))
+    try {
+      const run = vi.fn(async () => writeFile(join(directory, 'document.pdf'), pdf))
+      await exportOfficePdf(join(directory, 'document.pptx'), directory, { platform, run, env: { POWERPOINT_PDF_ENGINE: 'libreoffice' } })
+      expect(run.mock.calls[0][0]).not.toBe('powershell.exe')
+      expect(run.mock.calls[0][1]).toContain('pdf:impress_pdf_Export')
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+  it('streams presentation conversion stages and the PDF', async () => {
+    const request = Readable.from([Buffer.from('PPTX')])
+    request.method = 'POST'
+    request.headers = { accept: 'application/vnd.createpdf.powerpoint-stream' }
+    const res = response()
+    const events = []
+    res.write = data => events.push(JSON.parse(data))
+    await createPowerpointPdfHandler({ convert: async (_bytes, progress) => { progress('Converting presentation'); return pdf } })(request, res)
+    expect(res.headers['Content-Type']).toBe('application/vnd.createpdf.powerpoint-stream')
+    expect(events).toContainEqual({ type: 'progress', label: 'Converting presentation' })
+    expect(events.at(-1)).toEqual({ type: 'pdf', length: pdf.length })
+    expect(res.body).toEqual(pdf)
   })
 })

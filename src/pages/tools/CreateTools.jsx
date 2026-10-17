@@ -1,11 +1,13 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, BookOpen, Camera, Download, Image as ImageIcon, Table, Type } from 'lucide-react'
 import { marked } from 'marked'
 import { ToolPage } from '../../components/ToolPage'
+import { DocumentPdfPreview } from '../../components/DocumentPdfPreview'
 import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
 import { extractText, getPdfLib, imagesToPdf } from '../../services/pdfEngine'
 import { richHtmlToPdf, sanitizeDocumentHtml } from '../../services/richPdf'
+import { styledHtmlToPdf } from '../../services/htmlImport'
 import { importEbook } from '../../services/ebookImport'
 import { parseCsv } from '../../services/csv'
 
@@ -59,11 +61,44 @@ async function handwritingTextToPdf(text, options = {}) {
 function TextDocumentTool({ toolId, initialText = '', transform = (value) => value, helper, rich = false }) {
   const { showToast } = useApp()
   const [text, setText] = useState(initialText)
-  const [layout, setLayout] = useState({ fontSize: 12, pageSize: 'A4', margin: 46, orientation: 'portrait', fontFamily: 'sans-serif', lineHeight: 1.35, header: '', footer: '' })
+  const [layout, setLayout] = useState({ fontSize: 12, pageSize: 'A4', margin: 46, orientation: 'portrait', fontFamily: 'sans-serif', lineHeight: 1.35, header: '', footer: '', webLayout: 'desktop' })
   const [processing, setProcessing] = useState(false)
+  const [previewResult, setPreviewResult] = useState(null)
+  const [filename, setFilename] = useState(toolId)
+  const pdfRequestRef = useRef(null)
   const editorRef = useRef(null)
   const updateLayout = (key, value) => setLayout((current) => ({ ...current, [key]: value }))
-  const preview = sanitizeDocumentHtml(rich ? text : transform(text))
+  const markup = rich ? text : transform(text)
+  const pdfPreview = toolId === 'html-to-pdf'
+  const preview = pdfPreview ? '' : sanitizeDocumentHtml(markup)
+  const getPdf = useCallback((download = false) => {
+    const cached = pdfRequestRef.current
+    if (cached?.markup === markup && cached?.layout === layout) {
+      if (download) cached.download = true
+      return cached.promise
+    }
+    if (cached && !cached.download) cached.controller?.abort()
+    const request = { markup, layout, download, controller: pdfPreview ? new AbortController() : null }
+    request.promise = (pdfPreview ? styledHtmlToPdf(markup, layout, { signal: request.controller.signal }) : richHtmlToPdf(markup, layout)).catch(error => {
+      if (pdfRequestRef.current === request) pdfRequestRef.current = null
+      throw error
+    })
+    pdfRequestRef.current = request
+    return request.promise
+  }, [markup, layout, pdfPreview])
+  useEffect(() => {
+    if (!pdfPreview || !markup.trim()) return
+    let cancelled = false
+    const timer = setTimeout(() => {
+      getPdf().then(blob => {
+        if (!cancelled) setPreviewResult({ markup, layout, blob })
+      }).catch(error => {
+        if (!cancelled) setPreviewResult({ markup, layout, error: error.message })
+      })
+    }, 750)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [getPdf, pdfPreview, markup, layout])
+  const previewCurrent = previewResult?.markup === markup && previewResult?.layout === layout
   const runCommand = (command, value) => {
     editorRef.current?.focus()
     document.execCommand(command, false, value)
@@ -85,6 +120,7 @@ function TextDocumentTool({ toolId, initialText = '', transform = (value) => val
     if (!file) return
     try {
       const content = await file.text()
+      if (pdfPreview) setFilename(file.name.replace(/\.[^.]+$/, ''))
       if (rich) {
         const html = sanitizeDocumentHtml(content)
         if (editorRef.current) editorRef.current.innerHTML = html
@@ -102,12 +138,14 @@ function TextDocumentTool({ toolId, initialText = '', transform = (value) => val
     if (!text.trim()) return showToast('Add some content first.', 'warning')
     setProcessing(true)
     try {
-      downloadBlob(await richHtmlToPdf(rich ? text : transform(text), layout), `${toolId}.pdf`)
-      showToast('PDF created locally.', 'success')
+      const blob = await getPdf(true)
+      if (pdfPreview) setPreviewResult({ markup, layout, blob })
+      downloadBlob(blob, `${(pdfPreview ? filename.trim().replace(/\.pdf$/i, '') : toolId) || toolId}.pdf`)
+      showToast(pdfPreview ? 'HTML PDF created.' : 'PDF created locally.', 'success')
     } catch (error) { showToast(error.message, 'error') } finally { setProcessing(false) }
   }
   const tokens = (value) => value.replaceAll('{page}', '1').replaceAll('{total}', '1')
-  return <ToolPage toolId={toolId}><div className="composer-layout">
+  return <ToolPage toolId={toolId}><div className={`composer-layout${pdfPreview ? ' html-composer-layout' : ''}`}>
     <div className="tool-panel">
       <label className="btn btn-secondary">Import document<input type="file" hidden accept={toolId === 'markdown-to-pdf' ? '.md,.markdown,text/markdown,text/plain' : '.html,.htm,text/html,text/plain'} onChange={(event) => { importContent(event.target.files?.[0]); event.target.value = '' }} /></label>
       <FormGroup label="Document content" hint={helper}>{rich ? <>
@@ -123,8 +161,10 @@ function TextDocumentTool({ toolId, initialText = '', transform = (value) => val
           <label>Image<input type="file" accept="image/png,image/jpeg" hidden onChange={(event) => { addImage(event.target.files?.[0]); event.target.value = '' }} /></label>
         </div>
         <div ref={editorRef} className="form-textarea composer-editor rich-editor" contentEditable suppressContentEditableWarning onPaste={paste} onDrop={(event) => { event.preventDefault(); addImage(event.dataTransfer.files?.[0]) }} onInput={() => setText(sanitizeDocumentHtml(editorRef.current?.innerHTML || ''))} dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(initialText) }} />
-      </> : <textarea className="form-textarea composer-editor" value={text} onChange={(event) => setText(event.target.value)} />}</FormGroup>
+      </> : <textarea className="form-textarea composer-editor" aria-label={pdfPreview ? 'HTML source' : 'Document content'} spellCheck={pdfPreview ? false : undefined} value={text} onChange={(event) => setText(event.target.value)} />}</FormGroup>
+      {pdfPreview && <FormGroup label="PDF filename"><input className="form-input" value={filename} onChange={event => setFilename(event.target.value)} /></FormGroup>}
       <div className="form-grid">
+        {pdfPreview && <FormGroup label="Web layout"><select className="form-select" value={layout.webLayout} onChange={event => updateLayout('webLayout', event.target.value)}><option value="desktop">Desktop design (fit to paper)</option><option value="paper">Responsive to paper width</option></select></FormGroup>}
         <FormGroup label="Page size"><select className="form-select" value={layout.pageSize} onChange={(event) => updateLayout('pageSize', event.target.value)}><option>A4</option><option>Letter</option></select></FormGroup>
         <FormGroup label="Orientation"><select className="form-select" value={layout.orientation} onChange={(event) => updateLayout('orientation', event.target.value)}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></FormGroup>
         <FormGroup label="Base font size"><input className="form-input" type="number" min="8" max="32" value={layout.fontSize} onChange={(event) => updateLayout('fontSize', Number(event.target.value))} /></FormGroup>
@@ -134,15 +174,15 @@ function TextDocumentTool({ toolId, initialText = '', transform = (value) => val
         <FormGroup label="Header"><input className="form-input" value={layout.header} onChange={(event) => updateLayout('header', event.target.value)} /></FormGroup>
         <FormGroup label="Footer" hint="Use {page} and {total} for page numbers"><input className="form-input" value={layout.footer} onChange={(event) => updateLayout('footer', event.target.value)} /></FormGroup>
       </div>
-      <button className="btn btn-primary btn-lg" onClick={create} disabled={processing}><Download size={17} /> {processing ? 'Creating…' : 'Create PDF'}</button>
+      <button className="btn btn-primary btn-lg" onClick={create} disabled={processing || !text.trim()}><Download size={17} /> {processing ? 'Creating…' : 'Create PDF'}</button>
     </div>
-    <div className="tool-panel document-preview"><span className="preview-label">Live preview</span><div className="paper-preview rich-preview" style={{ padding: layout.margin, fontFamily: layout.fontFamily, fontSize: layout.fontSize, lineHeight: layout.lineHeight }}>{layout.header && <div className="preview-running-text">{tokens(layout.header)}</div>}<div dangerouslySetInnerHTML={{ __html: preview }} />{layout.footer && <div className="preview-running-text">{tokens(layout.footer)}</div>}</div></div>
+    {pdfPreview ? <DocumentPdfPreview blob={markup.trim() ? previewResult?.blob : null} updating={Boolean(markup.trim()) && !previewCurrent} error={previewCurrent ? previewResult?.error : ''} empty={!markup.trim()} /> : <div className="tool-panel document-preview"><span className="preview-label">Live preview</span><div className="paper-preview rich-preview" style={{ padding: layout.margin, fontFamily: layout.fontFamily, fontSize: layout.fontSize, lineHeight: layout.lineHeight }}>{layout.header && <div className="preview-running-text">{tokens(layout.header)}</div>}<div dangerouslySetInnerHTML={{ __html: preview }} />{layout.footer && <div className="preview-running-text">{tokens(layout.footer)}</div>}</div></div>}
   </div></ToolPage>
 }
 
 export function CreatePdf() { return <TextDocumentTool toolId="create-pdf" initialText={'<h1>Document title</h1><p>Start writing your document here.</p>'} helper="Format text, add tables and local images, then download a PDF." rich /> }
 export function MarkdownToPdf() { return <TextDocumentTool toolId="markdown-to-pdf" initialText={'# Document title\n\nWrite **Markdown** here.\n\n- Lists\n- Links\n- Code'} transform={(value) => marked.parse(value)} helper="Markdown headings, lists, code, and tables render in the PDF." /> }
-export function HtmlToPdf() { return <TextDocumentTool toolId="html-to-pdf" initialText={'<h1>Document title</h1>\n<p>Paste safe HTML here.</p>'} helper="Scripts and unsafe markup are removed. Embedded data-image URLs are supported." /> }
+export function HtmlToPdf() { return <TextDocumentTool toolId="html-to-pdf" initialText={'<h1>Document title</h1>\n<p>Paste HTML here, including its CSS.</p>'} helper="HTML and CSS are rendered on this app’s server. Grids, colors, inline styles and public HTTPS assets are preserved. Scripts stay disabled; use embedded images for files stored on your computer." /> }
 export function TextToHandwriting() {
   const { showToast } = useApp()
   const [text, setText] = useState('Dear reader,\n\nType your handwritten-style note here.')

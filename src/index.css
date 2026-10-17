@@ -165,11 +165,30 @@ body {
 .composer-editor { min-height: 330px; font-family: var(--font-mono); margin-bottom: 14px; }
 .document-preview { background: var(--bg-surface-2); }
 .preview-label { display: block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+.html-composer-layout { align-items: start; }
+.html-composer-layout > .tool-panel { min-width: 0; }
+.html-composer-layout .composer-editor { min-height: 360px; resize: vertical; line-height: 1.5; tab-size: 2; }
+.pdf-document-preview { position: sticky; top: 100px; }
+.pdf-preview-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 12px; }
+.pdf-preview-heading .tool-panel-title { margin: 0; }
+.pdf-preview-toolbar, .pdf-preview-navigation { display: flex; align-items: center; gap: 8px; }
+.pdf-preview-toolbar { flex-wrap: wrap; justify-content: space-between; margin-bottom: 12px; }
+.pdf-preview-navigation { font-size: 12px; white-space: nowrap; }
+.pdf-preview-toolbar .form-select { width: auto; min-width: 112px; padding-block: 7px; }
+.pdf-preview-viewport { height: clamp(360px, 68vh, 720px); overflow: auto; padding: 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-body); }
+.pdf-preview-viewport canvas { display: block; margin: 0 auto; background: white; box-shadow: var(--shadow-md); }
+.pdf-preview-viewport canvas[hidden] { display: none; }
+.pdf-preview-error { color: var(--danger); font-size: var(--font-size-sm); margin-bottom: 10px; }
+@media (max-width: 900px) { .pdf-document-preview { position: static; } }
 .paper-preview { min-height: 500px; padding: 44px; background: white; color: #15171c; white-space: pre-wrap; line-height: 1.5; box-shadow: var(--shadow-md); border-radius: 4px; }
 .table-preview { overflow: auto; }
 .table-preview table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .table-preview th, .table-preview td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; }
 .table-preview th { background: var(--bg-surface-2); }
+.spreadsheet-preview-scroll { max-height: 560px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.spreadsheet-preview-scroll table { width: max-content; min-width: 100%; }
+.spreadsheet-preview-scroll th, .spreadsheet-preview-scroll td { min-width: 100px; max-width: 480px; white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; }
+.spreadsheet-preview-scroll th { position: sticky; top: 0; z-index: 1; }
 @media (max-width: 900px) { .composer-layout { grid-template-columns: 1fr; } }
 .form-fields-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 16px; }
 .check-row { display: flex; gap: 8px; align-items: center; color: var(--text-secondary); font-size: var(--font-size-sm); }

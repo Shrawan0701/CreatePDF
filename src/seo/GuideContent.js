@@ -7,6 +7,8 @@ export function ToolGuide({ tool, LinkComponent = 'a' }) {
   const [purpose, steps, limitation] = TOOL_GUIDES[tool.id];
   const ai = tool.catKey === 'ai';
   const privacy = ai ? 'This feature sends extracted document text to AI through the app’s API. The original PDF stays in your browser. A configured AI API key and internet access are required, and API usage is billed by AI.'
+    : tool.id === 'html-to-pdf' ? 'HTML and CSS are sent to this app’s server for rendering, including previews. Referenced public HTTPS styles, fonts and images may be loaded. Uploaded scripts are disabled.'
+    : ['word-to-pdf', 'powerpoint-to-pdf'].includes(tool.id) ? 'Your document is sent to this app’s server for layout-preserving conversion. The temporary document copy is deleted after conversion.'
     : tool.id === 'invoice-extractor' ? 'Text extraction and OCR run locally by default. If you choose optional AI extraction, the extracted bill text is sent to AI.'
     : tool.catKey === 'collab' ? 'Sharing and collaboration connect participants through the available room and peer connection. Only share documents and boards with the intended recipients.'
     : 'This tool processes your document in your browser. There is no document upload to the application server for this operation. Download the result to keep your own copy.';

@@ -1,7 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { wordToPdf } from './wordImport'
+import { wordToPdf, powerpointToPdf } from './wordImport'
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 describe('mobile Word conversion client', () => {
+ it('uploads presentations to their own endpoint and reads streamed progress', async () => {
+  const file = new Blob(['PPTX'])
+  const pdf = '%PDF-1.7\nfixture'
+  const progress = vi.fn()
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(`${JSON.stringify({ type: 'progress', label: 'Rendering slides' })}\n${JSON.stringify({ type: 'pdf', length: pdf.length })}\n${pdf}`, { headers: { 'Content-Type': 'application/vnd.createpdf.powerpoint-stream' } })))
+  expect(await (await powerpointToPdf(file, progress)).text()).toBe(pdf)
+  expect(fetch).toHaveBeenCalledWith('/api/powerpoint-to-pdf', expect.objectContaining({ body: file, headers: {
+   'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+   Accept: 'application/vnd.createpdf.powerpoint-stream, application/pdf',
+  } }))
+  expect(progress).toHaveBeenCalledWith(null, 'Rendering slides')
+ })
  it('reads real status events and a PDF split across arbitrary network chunks', async () => {
   const pdf = new TextEncoder().encode('%PDF-1.7\nfixture')
   const header = new TextEncoder().encode(`${JSON.stringify({ type: 'progress', label: 'Converting document' })}\n${JSON.stringify({ type: 'pdf', length: pdf.length })}\n`)

@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { extname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import JSZip from 'jszip'
 
@@ -11,37 +11,42 @@ const maxBytes = 32 * 1024 * 1024
 let pending = Promise.resolve()
 const failure = (message, status = 422) => Object.assign(new Error(message), { status })
 
-// Run an actual Office layout engine; HTML renderers cannot reproduce Word's
-// grouped drawings, floating anchors, VML, section layout or pagination.
+// Keep the original Office package so the layout engine can resolve masters,
+// grouped drawings, anchors, text wrapping and pagination.
 export async function exportOfficePdf(input, directory, { platform = process.platform, run = execute, env = process.env, progress = () => {} } = {}) {
-  if (env.WORD_PDF_ENGINE === 'wasm' || (env.VERCEL && !env.LIBREOFFICE_PATH && env.WORD_PDF_ENGINE !== 'libreoffice')) {
+  const presentation = extname(input).toLowerCase() === '.pptx'
+  const engine = presentation ? env.POWERPOINT_PDF_ENGINE || 'wasm' : env.WORD_PDF_ENGINE
+  if (engine === 'wasm' || (env.VERCEL && !env.LIBREOFFICE_PATH && engine !== 'libreoffice')) {
     const { exportWasmPdf } = await import('./wordWasm.js')
-    return exportWasmPdf(await readFile(input), progress)
+    return exportWasmPdf(await readFile(input), progress, presentation ? 'document.pptx' : 'document.docx')
   }
   const output = join(directory, 'document.pdf')
   const options = { timeout: 120000, windowsHide: true, maxBuffer: 1024 * 1024 }
   progress('Converting document')
-  if (platform === 'win32' && env.WORD_PDF_ENGINE !== 'libreoffice') {
+  if (platform === 'win32' && !presentation && engine !== 'libreoffice') {
     const script = fileURLToPath(new URL('./word-export.ps1', import.meta.url))
     await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-InputPath', input, '-OutputPath', output], options)
   } else {
     const binary = env.LIBREOFFICE_PATH || (platform === 'darwin' ? '/Applications/LibreOffice.app/Contents/MacOS/soffice' : platform === 'win32' ? 'C:\\Program Files\\LibreOffice\\program\\soffice.com' : 'soffice')
     const profile = pathToFileURL(join(directory, 'office-profile')).href
-    await run(binary, [`-env:UserInstallation=${profile}`, '--headless', '--norestore', '--convert-to', 'pdf:writer_pdf_Export', '--outdir', directory, input], options)
+    await run(binary, [`-env:UserInstallation=${profile}`, '--headless', '--norestore', '--convert-to', presentation ? 'pdf:impress_pdf_Export' : 'pdf:writer_pdf_Export', '--outdir', directory, input], options)
   }
   const bytes = await readFile(output)
   if (bytes.subarray(0, 5).toString() !== '%PDF-') throw failure('The Office engine did not produce a valid PDF.')
   return bytes
 }
 
-export async function convertWordDocument(bytes, { exporter = exportOfficePdf } = {}) {
-  if (!bytes.length || bytes.length > maxBytes) throw failure('Choose a DOCX document up to 32 MB.', 413)
+export async function convertOfficeDocument(bytes, { exporter = exportOfficePdf, format = 'docx' } = {}) {
+  if (!['docx', 'pptx'].includes(format)) throw failure('Unsupported Office document format.', 400)
+  const extension = format.toUpperCase()
+  const mainPart = format === 'pptx' ? 'ppt/presentation.xml' : 'word/document.xml'
+  if (!bytes.length || bytes.length > maxBytes) throw failure(`Choose a ${extension} document up to 32 MB.`, 413)
   let zip
-  try { zip = await JSZip.loadAsync(bytes) } catch { throw failure('Choose a valid DOCX Word document.', 400) }
-  if (!zip.file('word/document.xml')) throw failure('The DOCX document is missing its main content.', 400)
+  try { zip = await JSZip.loadAsync(bytes) } catch { throw failure(`Choose a valid ${extension} ${format === 'pptx' ? 'PowerPoint presentation' : 'Word document'}.`, 400) }
+  if (!zip.file(mainPart)) throw failure(`The ${extension} document is missing its main content.`, 400)
   const directory = await mkdtemp(join(tmpdir(), 'createpdf-office-'))
   try {
-    const input = join(directory, 'document.docx')
+    const input = join(directory, `document.${format}`)
     await writeFile(input, bytes)
     return await exporter(input, directory)
   } finally {
@@ -49,8 +54,15 @@ export async function convertWordDocument(bytes, { exporter = exportOfficePdf } 
   }
 }
 
-export function createWordPdfHandler({ convert, env = process.env } = {}) {
-  const convertFile = convert || ((bytes, progress) => convertWordDocument(bytes, {
+export const convertWordDocument = (bytes, options = {}) => convertOfficeDocument(bytes, { ...options, format: 'docx' })
+
+export function createOfficePdfHandler({ convert, env = process.env, format = 'docx' } = {}) {
+  const presentation = format === 'pptx'
+  const extension = format.toUpperCase()
+  const label = presentation ? 'PowerPoint' : 'Word'
+  const streamType = `application/vnd.createpdf.${presentation ? 'powerpoint' : 'word'}-stream`
+  const convertFile = convert || ((bytes, progress) => convertOfficeDocument(bytes, {
+    format,
     exporter: (input, directory) => exportOfficePdf(input, directory, { env, progress }),
   }))
   return async (request, response) => {
@@ -59,7 +71,7 @@ export function createWordPdfHandler({ convert, env = process.env } = {}) {
       response.setHeader('Allow', 'POST')
       response.statusCode = 405
       response.setHeader('Content-Type', 'application/json')
-      response.end(JSON.stringify({ error: 'Use POST to convert a DOCX document.' }))
+      response.end(JSON.stringify({ error: `Use POST to convert a ${extension} document.` }))
       return
     }
     let streaming = false
@@ -67,7 +79,7 @@ export function createWordPdfHandler({ convert, env = process.env } = {}) {
     const event = data => { if (!response.destroyed) response.write(`${JSON.stringify(data)}\n`) }
     const progress = label => { if (streaming) event({ type: 'progress', label }) }
     try {
-      if (Number(request.headers['content-length']) > maxBytes) throw failure('Choose a DOCX document up to 32 MB.', 413)
+      if (Number(request.headers['content-length']) > maxBytes) throw failure(`Choose a ${extension} document up to 32 MB.`, 413)
       let bytes
       if (Buffer.isBuffer(request.body)) bytes = request.body
       else {
@@ -75,15 +87,15 @@ export function createWordPdfHandler({ convert, env = process.env } = {}) {
         let size = 0
         for await (const chunk of request) {
           size += chunk.length
-          if (size > maxBytes) throw failure('Choose a DOCX document up to 32 MB.', 413)
+          if (size > maxBytes) throw failure(`Choose a ${extension} document up to 32 MB.`, 413)
           chunks.push(chunk)
         }
         bytes = Buffer.concat(chunks)
       }
-      if (request.headers.accept?.includes('application/vnd.createpdf.word-stream')) {
+      if (request.headers.accept?.includes(streamType)) {
         streaming = true
         response.statusCode = 200
-        response.setHeader('Content-Type', 'application/vnd.createpdf.word-stream')
+        response.setHeader('Content-Type', streamType)
         response.setHeader('X-Accel-Buffering', 'no')
         response.flushHeaders?.()
         progress('Upload complete. Waiting for conversion slot')
@@ -110,8 +122,8 @@ export function createWordPdfHandler({ convert, env = process.env } = {}) {
       response.setHeader('Content-Disposition', 'attachment; filename="document.pdf"')
       response.end(pdf)
     } catch (error) {
-      if (!error.status) console.error('Word PDF conversion failed:', error)
-      const message = error.status ? error.message : 'The Word conversion engine could not process this document. Please try again. If it keeps failing, check the conversion function logs.'
+      if (!error.status) console.error(`${label} PDF conversion failed:`, error)
+      const message = error.status ? error.message : `The ${label} conversion engine could not process this document. Please try again. If it keeps failing, check the conversion function logs.`
       if (streaming) {
         event({ type: 'error', error: message })
         response.end()
@@ -123,3 +135,6 @@ export function createWordPdfHandler({ convert, env = process.env } = {}) {
     } finally { clearInterval(heartbeat) }
   }
 }
+
+export const createWordPdfHandler = (options = {}) => createOfficePdfHandler({ ...options, format: 'docx' })
+export const createPowerpointPdfHandler = (options = {}) => createOfficePdfHandler({ ...options, format: 'pptx' })

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { Download, FileInput, FileOutput, FileText } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
@@ -6,10 +6,10 @@ import { Document, Packer, Paragraph, Table, TableCell, TableRow } from 'docx'
 import { ToolPage } from '../../components/ToolPage'
 import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
-import { extractEmbeddedImages, extractLayout, getPdfLib } from '../../services/pdfEngine'
+import { extractEmbeddedImages, extractLayout } from '../../services/pdfEngine'
 import { richHtmlToPdf } from '../../services/richPdf'
 import { pdfToEpub, pdfToHtml, pdfToPresentation, pdfToWorkbook } from '../../services/documentExports'
-import { wordToPdf } from '../../services/wordImport'
+import { wordToPdf, powerpointToPdf } from '../../services/wordImport'
 import { parseCsv } from '../../services/csv'
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
@@ -58,85 +58,10 @@ async function workbookToPdf(workbook, selected, options) {
       }
       rows.push(`<tr>${cells.join('')}</tr>`)
     })
-    return `<section${sheetIndex ? ' data-page-break="before"' : ''}><h2>${escapeHtml(sheet.name)}</h2><table>${rows.join('')}</table></section>`
+    const heading = options.includeSheetNames === false ? '' : `<h2>${escapeHtml(sheet.name)}</h2>`
+    return `<section${sheetIndex ? ' data-page-break="before"' : ''}>${heading}<table>${rows.join('')}</table></section>`
   }).join('')
   return richHtmlToPdf(html || '<p>Empty workbook</p>', { ...options, tableMinColumnWidth: options.scaling === 'compact' ? 45 : 65 })
-}
-
-async function powerpointToPdf(file, progress) {
-  const zip = await JSZip.loadAsync(file)
-  const presentation = new DOMParser().parseFromString(await zip.file('ppt/presentation.xml')?.async('string') || '', 'text/xml')
-  const slideSize = presentation.getElementsByTagName('p:sldSz')[0]
-  const slideWidth = Number(slideSize?.getAttribute('cx') || 12192000)
-  const slideHeight = Number(slideSize?.getAttribute('cy') || 6858000)
-  const width = 960
-  const height = width * slideHeight / slideWidth
-  const scale = width / slideWidth
-  const slides = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name)).sort((left, right) => Number(left.match(/slide(\d+)/)[1]) - Number(right.match(/slide(\d+)/)[1]))
-  if (!slides.length) throw new Error('No slides found in the PowerPoint file.')
-  const { PDFDocument, StandardFonts, rgb } = await getPdfLib()
-  const output = await PDFDocument.create()
-  const regular = await output.embedFont(StandardFonts.Helvetica)
-  const bold = await output.embedFont(StandardFonts.HelveticaBold)
-  const colorFrom = (element, fallback = '#111827') => {
-    const value = element?.getElementsByTagName('a:srgbClr')[0]?.getAttribute('val') || fallback.slice(1)
-    return rgb(parseInt(value.slice(0, 2), 16) / 255, parseInt(value.slice(2, 4), 16) / 255, parseInt(value.slice(4, 6), 16) / 255)
-  }
-  const geometry = (element) => {
-    const transform = element.getElementsByTagName('a:xfrm')[0]
-    const offset = transform?.getElementsByTagName('a:off')[0]
-    const extent = transform?.getElementsByTagName('a:ext')[0]
-    if (!offset || !extent) return null
-    const x = Number(offset.getAttribute('x')) * scale
-    const boxWidth = Number(extent.getAttribute('cx')) * scale
-    const boxHeight = Number(extent.getAttribute('cy')) * scale
-    const y = height - Number(offset.getAttribute('y')) * scale - boxHeight
-    return { x, y, width: boxWidth, height: boxHeight }
-  }
-  for (let index = 0; index < slides.length; index++) {
-    const slidePath = slides[index]
-    const document = new DOMParser().parseFromString(await zip.file(slidePath).async('string'), 'text/xml')
-    const page = output.addPage([width, height])
-    const relationships = await zip.file(slidePath.replace(/([^/]+)$/, '_rels/$1.rels'))?.async('string')
-    const relationDoc = new DOMParser().parseFromString(relationships || '', 'text/xml')
-    const media = new Map([...relationDoc.getElementsByTagName('Relationship')].map((entry) => [entry.getAttribute('Id'), entry.getAttribute('Target')]))
-    const tree = document.getElementsByTagName('p:spTree')[0]
-    for (const element of tree?.children || []) {
-      const box = geometry(element)
-      if (!box) continue
-      if (element.localName === 'pic') {
-        const relation = element.getElementsByTagName('a:blip')[0]?.getAttribute('r:embed')
-        const target = media.get(relation)
-        if (!target) continue
-        const imagePath = new URL(target, `https://package.local/${slidePath.slice(0, slidePath.lastIndexOf('/') + 1)}`).pathname.slice(1)
-        const imageFile = zip.file(imagePath)
-        if (!imageFile) continue
-        const bytes = await imageFile.async('uint8array')
-        const image = /\.jpe?g$/i.test(imagePath) ? await output.embedJpg(bytes) : /\.png$/i.test(imagePath) ? await output.embedPng(bytes) : null
-        if (image) page.drawImage(image, box)
-        continue
-      }
-      if (element.localName !== 'sp') continue
-      const properties = element.getElementsByTagName('p:spPr')[0]
-      const fill = properties?.getElementsByTagName('a:solidFill')[0]
-      if (fill?.getElementsByTagName('a:srgbClr').length) page.drawRectangle({ ...box, color: colorFrom(fill) })
-      const paragraphs = [...element.getElementsByTagName('a:p')]
-      if (!paragraphs.length) continue
-      let cursor = box.y + box.height - 18
-      for (const paragraph of paragraphs) {
-        const text = [...paragraph.getElementsByTagName('a:t')].map((item) => item.textContent).join('')
-        if (!text) { cursor -= 16; continue }
-        const run = paragraph.getElementsByTagName('a:rPr')[0]
-        const size = Math.max(8, Math.min(40, Number(run?.getAttribute('sz') || 1800) / 100 * width / 960))
-        const font = run?.getAttribute('b') === '1' ? bold : regular
-        const draw = text.replace(/[^\x20-\xFF]/g, '?')
-        page.drawText(draw, { x: box.x + 7, y: cursor, size, font, color: colorFrom(run), maxWidth: Math.max(10, box.width - 14), lineHeight: size * 1.25 })
-        cursor -= size * 1.35
-      }
-    }
-    progress(Math.round((index + 1) / slides.length * 90))
-  }
-  return new Blob([await output.save()], { type: 'application/pdf' })
 }
 
 function ImportTool({ toolId, accept, convert, note, retainDownload = false, successMessage = 'Conversion completed locally.' }) {
@@ -156,6 +81,22 @@ function ImportTool({ toolId, accept, convert, note, retainDownload = false, suc
 }
 
 export function WordToPdf() { return <ImportTool toolId="word-to-pdf" accept={['.docx']} note="Your file is sent to this app’s server and deleted after conversion." retainDownload successMessage="Conversion completed." convert={async (file, progress) => ({ blob: await wordToPdf(file, progress), name: file.name.replace(/\.docx$/i, '.pdf') })} /> }
+
+const SpreadsheetPreview = memo(function SpreadsheetPreview({ sheet }) {
+  const rows = useMemo(() => Array.from({ length: sheet.rowCount }, (_, rowIndex) =>
+    Array.from({ length: sheet.columnCount }, (_, columnIndex) => spreadsheetCellText(sheet.getCell(rowIndex + 1, columnIndex + 1)))), [sheet])
+
+  return <div className="tool-panel table-preview">
+    <h2 className="tool-panel-title">{sheet.name} preview</h2>
+    <p className="form-hint">All {sheet.rowCount.toLocaleString()} rows and {sheet.columnCount.toLocaleString()} columns. Scroll to view the full worksheet.</p>
+    {rows.length > 0 ? <div className="spreadsheet-preview-scroll" role="region" aria-label={`${sheet.name} worksheet preview`} tabIndex={0}>
+      <table><thead><tr>{rows[0].map((value, index) => <th scope="col" key={index}>{value}</th>)}</tr></thead>
+        <tbody>{rows.slice(1).map((row, rowIndex) => <tr key={rowIndex}>{row.map((value, columnIndex) => <td key={columnIndex}>{value}</td>)}</tr>)}</tbody>
+      </table>
+    </div> : <p className="form-hint">This worksheet is empty.</p>}
+  </div>
+})
+
 export function ExcelToPdf() {
   const { showToast } = useApp()
   const [file, setFile] = useState(null)
@@ -181,14 +122,13 @@ export function ExcelToPdf() {
     setBusy(true)
     setProgress(30)
     try {
-      const blob = await workbookToPdf(workbook, selected, options)
+      const blob = await workbookToPdf(workbook, selected, { ...options, includeSheetNames: !/\.csv$/i.test(file.name) })
       setProgress(100)
       downloadBlob(blob, file.name.replace(/\.(xlsx|csv)$/i, '.pdf'))
       showToast('Spreadsheet PDF created.', 'success')
     } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
   }
-  const previewSheet = workbook?.worksheets.find((sheet) => selected.includes(sheet.name))
-  const previewRows = previewSheet ? Array.from({ length: Math.min(previewSheet.rowCount, 8) }, (_, rowIndex) => Array.from({ length: Math.min(previewSheet.columnCount, 8) }, (_, columnIndex) => spreadsheetCellText(previewSheet.getCell(rowIndex + 1, columnIndex + 1)))) : []
+  const previewSheets = workbook?.worksheets.filter((sheet) => selected.includes(sheet.name)) || []
   return <ToolPage toolId="excel-to-pdf">
     <div className="tool-panel"><DropZone accept={['.xlsx', '.csv']} onFiles={choose}><FileInput size={30} /><div className="drop-zone-title">Choose a workbook or CSV</div><div className="drop-zone-sub">Select sheets and set the print layout before exporting.</div></DropZone>{file && <FileItem file={file} onRemove={() => { setFile(null); setWorkbook(null); setSelected([]) }} />}</div>
     {workbook && <><div className="tool-panel"><div className="tool-panel-title">Worksheets</div><div className="action-row">{workbook.worksheets.map((sheet) => <label className="check-row" key={sheet.id}><input type="checkbox" checked={selected.includes(sheet.name)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, sheet.name] : current.filter((name) => name !== sheet.name))} /> {sheet.name}{sheet.state === 'hidden' || sheet.state === 'veryHidden' ? ' (hidden)' : ''}</label>)}</div><div className="form-grid">
@@ -197,11 +137,11 @@ export function ExcelToPdf() {
       <FormGroup label="Margins (points)"><input className="form-input" type="number" min="20" max="100" value={options.margin} onChange={(event) => change('margin', Number(event.target.value))} /></FormGroup>
       <FormGroup label="Table text size"><input className="form-input" type="number" min="6" max="14" value={options.tableFontSize} onChange={(event) => change('tableFontSize', Number(event.target.value))} /></FormGroup>
       <FormGroup label="Column spacing"><select className="form-select" value={options.scaling} onChange={(event) => change('scaling', event.target.value)}><option value="readable">Comfortable columns</option><option value="compact">Compact columns</option></select></FormGroup>
-    </div><p className="form-hint">Wide sheets continue in column groups. Each selected sheet starts on a new page.</p></div>{previewRows.length > 0 && <div className="tool-panel table-preview"><div className="tool-panel-title">{previewSheet.name} preview</div><table><tbody>{previewRows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((value, columnIndex) => rowIndex === 0 ? <th key={columnIndex}>{value}</th> : <td key={columnIndex}>{value}</td>)}</tr>)}</tbody></table><p className="form-hint">Preview shows up to eight rows and columns.</p></div>}</>}
+    </div><p className="form-hint">Wide sheets continue in column groups. Each selected sheet starts on a new page.</p></div>{previewSheets.map((sheet) => <SpreadsheetPreview key={sheet.id} sheet={sheet} />)}</>}
     {busy && <ProgressBar value={progress} label="Converting spreadsheet" />}<button className="btn btn-primary btn-lg" disabled={!workbook || !selected.length || busy} onClick={run}><Download size={17} /> Convert and download</button>
   </ToolPage>
 }
-export function PowerPointToPdf() { return <ImportTool toolId="powerpoint-to-pdf" accept={['.pptx']} note="Keeps basic slide positions, text, solid shapes, and embedded PNG/JPEG images. Charts and effects are not supported." convert={async (file, progress) => ({ blob: await powerpointToPdf(file, progress), name: file.name.replace(/\.pptx$/i, '.pdf') })} /> }
+export function PowerPointToPdf() { return <ImportTool toolId="powerpoint-to-pdf" accept={['.pptx']} note="Your presentation is sent to this app?s server to preserve slide layouts, then deleted after conversion." retainDownload successMessage="Presentation converted." convert={async (file, progress) => ({ blob: await powerpointToPdf(file, progress), name: file.name.replace(/\.pptx$/i, '.pdf') })} /> }
 
 function layoutTable(lines, pageWidth) {
   const positions = []
