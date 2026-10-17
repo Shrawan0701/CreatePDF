@@ -306,7 +306,7 @@ export async function addPageNumbers(file, options = {}) {
 }
 
 export async function imagesToPdf(imageFiles, options = {}) {
-  const { PDFDocument, pushGraphicsState, popGraphicsState, concatTransformationMatrix } = await import('pdf-lib');
+  const { PDFDocument, pushGraphicsState, popGraphicsState, concatTransformationMatrix, rectangle, clip, endPath } = await import('pdf-lib');
   const { pageSize = 'image', fitMode = 'fit', margin = 0 } = options;
   const pdfDoc = await PDFDocument.create();
 
@@ -383,7 +383,9 @@ export async function imagesToPdf(imageFiles, options = {}) {
     const imgH = imageHeight * scale;
     const x = margin + (maxW - imgW) / 2;
     const y = margin + (maxH - imgH) / 2;
+    page.pushOperators(pushGraphicsState(), rectangle(margin, margin, maxW, maxH), clip(), endPath());
     drawImage(page, { x, y, width: imgW, height: imgH });
+    page.pushOperators(popGraphicsState());
   }
 
   const out = await pdfDoc.save();

@@ -17,10 +17,13 @@ export default function ImagesToPdf() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
-  const [pageSize, setPageSize] = useState('image');
+  const [pageSize, setPageSize] = useState('A4');
   const [orientation, setOrientation] = useState('portrait');
+  const [fitMode, setFitMode] = useState('fit');
   const [margin, setMargin] = useState(0);
   const { showToast } = useApp();
+  const paperSize = pageSize === 'image' ? null : orientation === 'landscape' ? [...PAGE_SIZES[pageSize]].reverse() : PAGE_SIZES[pageSize];
+  const previewInset = paperSize ? `${Number(margin) / paperSize[1] * 100}% ${Number(margin) / paperSize[0] * 100}%` : 0;
 
   const handleFiles = (files) => {
     const imageFiles = files.filter((f) => f.type.startsWith('image/'));
@@ -48,10 +51,8 @@ export default function ImagesToPdf() {
     if (!images.length) return;
     setProcessing(true); setError(null); setProgress(0);
     try {
-      let size = pageSize === 'image' ? 'image' : PAGE_SIZES[pageSize];
-      if (pageSize !== 'image' && orientation === 'landscape') size = [size[1], size[0]];
       setProgress(30);
-      const blob = await imagesToPdf(images.map((i) => i.file), { pageSize: size, margin: pageSize === 'image' ? 0 : Number(margin) });
+      const blob = await imagesToPdf(images.map((i) => i.file), { pageSize: paperSize || 'image', fitMode, margin: paperSize ? Number(margin) : 0 });
       setProgress(90);
       downloadBlob(blob, 'images.pdf');
       setProgress(100);
@@ -76,7 +77,11 @@ export default function ImagesToPdf() {
           <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10 }}>
             {images.map((img, i) => (
               <div key={img.id} style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-surface-2)' }}>
-                <img src={img.preview} alt="" style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />
+                <div style={{ position: 'relative', aspectRatio: paperSize ? `${paperSize[0]} / ${paperSize[1]}` : '4 / 3', background: '#fff' }}>
+                  <div style={{ position: 'absolute', inset: previewInset }}>
+                    <img src={img.preview} alt={`Page ${i + 1} preview`} style={{ width: '100%', height: '100%', objectFit: paperSize && fitMode === 'fill' ? 'cover' : 'contain', display: 'block' }} />
+                  </div>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 4, padding: '4px', background: 'var(--bg-surface-2)' }}>
                   <button className="btn btn-sm btn-secondary btn-icon" style={{ padding: '3px 6px' }} onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp size={12} /></button>
                   <button className="btn btn-sm btn-danger btn-icon" style={{ padding: '3px 6px' }} onClick={() => remove(img.id)}><Trash2 size={12} /></button>
@@ -95,8 +100,8 @@ export default function ImagesToPdf() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
             <FormGroup label="Page Size">
               <select className="form-select" value={pageSize} onChange={(e) => setPageSize(e.target.value)}>
-                <option value="image">Fit to image (no borders)</option>
                 {Object.keys(PAGE_SIZES).map((s) => <option key={s}>{s}</option>)}
+                <option value="image">Original image size (pages may vary)</option>
               </select>
             </FormGroup>
             <FormGroup label="Orientation">
@@ -105,11 +110,17 @@ export default function ImagesToPdf() {
                 <option value="landscape">Landscape</option>
               </select>
             </FormGroup>
+            <FormGroup label="Image Fit">
+              <select className="form-select" value={fitMode} disabled={pageSize === 'image'} onChange={(e) => setFitMode(e.target.value)}>
+                <option value="fit">Fit full image (no cropping)</option>
+                <option value="fill">Crop to fill page (cuts off edges)</option>
+              </select>
+            </FormGroup>
             <FormGroup label="Margin (pt)">
               <input className="form-input" type="number" min={0} max={100} value={pageSize === 'image' ? 0 : margin} disabled={pageSize === 'image'} onChange={(e) => setMargin(e.target.value)} />
             </FormGroup>
           </div>
-          <p className="form-hint">{pageSize === 'image' ? 'Each page matches its image, with no added white margins or cropping. Backgrounds already in the image are preserved.' : 'Fixed paper sizes may leave white space when the image has a different shape.'}</p>
+          <p className="form-hint">{pageSize === 'image' ? 'Each page uses its image’s original proportions, so page sizes can differ.' : fitMode === 'fill' ? 'One image per page, all pages the same size. Images keep their proportions and are centered; edges are cropped to fill the page. Set margin to 0 for no added borders.' : 'One image per page, all pages the same size. The whole image is shown without stretching or cropping; space may remain around it.'}</p>
         </div>
       )}
 
