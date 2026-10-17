@@ -13,6 +13,7 @@
     "lint": "oxlint",
     "smoke": "node scripts/smoke.mjs",
     "smoke:conversion": "node scripts/conversion-smoke.mjs",
+    "smoke:images": "node scripts/image-orientation-smoke.mjs",
     "smoke:word-layout": "node scripts/word-layout-smoke.mjs",
     "smoke:word-wasm": "node scripts/word-wasm-smoke.mjs",
     "smoke:exports": "node scripts/export-smoke.mjs",

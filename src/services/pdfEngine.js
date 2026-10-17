@@ -1,4 +1,5 @@
 // Shared PDF engine using pdf-lib and pdfjs-dist
+import { readJpegOrientation } from './jpegOrientation';
 
 export async function loadPdfBytes(file) {
   if (file?.arrayBuffer) return new Uint8Array(await file.arrayBuffer());
@@ -305,7 +306,7 @@ export async function addPageNumbers(file, options = {}) {
 }
 
 export async function imagesToPdf(imageFiles, options = {}) {
-  const { PDFDocument } = await getPdfLib();
+  const { PDFDocument, pushGraphicsState, popGraphicsState, concatTransformationMatrix } = await import('pdf-lib');
   const { pageSize = 'image', fitMode = 'fit', margin = 0 } = options;
   const pdfDoc = await PDFDocument.create();
 
@@ -313,7 +314,9 @@ export async function imagesToPdf(imageFiles, options = {}) {
     const arrayBuf = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuf);
     let img;
+    let orientation = 1;
     if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
+      orientation = readJpegOrientation(bytes);
       img = await pdfDoc.embedJpg(bytes);
     } else if (file.type === 'image/png') {
       img = await pdfDoc.embedPng(bytes);
@@ -339,24 +342,48 @@ export async function imagesToPdf(imageFiles, options = {}) {
       img = await pdfDoc.embedPng(bArr);
     }
 
+    // JPEG pixels are embedded unchanged. Apply EXIF once in PDF coordinates
+    // (bottom-left origin), including mirrored selfies and quarter turns.
+    const transforms = [
+      null,
+      [1, 0, 0, 1, 0, 0],
+      [-1, 0, 0, 1, 1, 0],
+      [-1, 0, 0, -1, 1, 1],
+      [1, 0, 0, -1, 0, 1],
+      [0, -1, -1, 0, 1, 1],
+      [0, -1, 1, 0, 0, 1],
+      [0, 1, 1, 0, 0, 0],
+      [0, 1, -1, 0, 1, 0],
+    ];
+    const imageWidth = orientation >= 5 ? img.height : img.width;
+    const imageHeight = orientation >= 5 ? img.width : img.height;
+    const drawImage = (page, { x, y, width, height }) => {
+      const [a, b, c, d, e, f] = transforms[orientation];
+      page.pushOperators(pushGraphicsState(), concatTransformationMatrix(
+        a * width, b * height, c * width, d * height, x + e * width, y + f * height,
+      ));
+      page.drawImage(img, { x: 0, y: 0, width: 1, height: 1 });
+      page.pushOperators(popGraphicsState());
+    };
+
     if (pageSize === 'image') {
-      const scale = Math.min(1, 14400 / Math.max(img.width, img.height));
-      const width = img.width * scale;
-      const height = img.height * scale;
+      const scale = Math.min(1, 14400 / Math.max(imageWidth, imageHeight));
+      const width = imageWidth * scale;
+      const height = imageHeight * scale;
       const page = pdfDoc.addPage([width, height]);
-      page.drawImage(img, { x: 0, y: 0, width, height });
+      drawImage(page, { x: 0, y: 0, width, height });
       continue;
     }
     const page = pdfDoc.addPage(pageSize);
     const { width, height } = page.getSize();
     const maxW = width - margin * 2;
     const maxH = height - margin * 2;
-    const scale = fitMode === 'fill' ? Math.max(maxW / img.width, maxH / img.height) : Math.min(maxW / img.width, maxH / img.height);
-    const imgW = img.width * scale;
-    const imgH = img.height * scale;
+    const scale = fitMode === 'fill' ? Math.max(maxW / imageWidth, maxH / imageHeight) : Math.min(maxW / imageWidth, maxH / imageHeight);
+    const imgW = imageWidth * scale;
+    const imgH = imageHeight * scale;
     const x = margin + (maxW - imgW) / 2;
     const y = margin + (maxH - imgH) / 2;
-    page.drawImage(img, { x, y, width: imgW, height: imgH });
+    drawImage(page, { x, y, width: imgW, height: imgH });
   }
 
   const out = await pdfDoc.save();
