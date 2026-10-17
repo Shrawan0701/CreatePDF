@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, BookOpen, Camera, Download, Image as ImageIcon, Type } from 'lucide-react'
+import { ArrowDown, ArrowUp, Camera, Download, Image as ImageIcon, Type } from 'lucide-react'
 import { ToolPage } from '../../components/ToolPage'
 import { DocumentPdfPreview } from '../../components/DocumentPdfPreview'
 import { CreatePdfComposer } from '../../components/CreatePdfComposer'
@@ -9,7 +9,7 @@ import { useApp } from '../../context/AppContext'
 import { extractText, getPdfLib, imagesToPdf } from '../../services/pdfEngine'
 import { richHtmlToPdf, sanitizeDocumentHtml } from '../../services/richPdf'
 import { styledHtmlToPdf } from '../../services/htmlImport'
-import { importEbook } from '../../services/ebookImport'
+import { EbookPdfComposer } from '../../components/EbookPdfComposer'
 import { CsvPdfComposer } from '../../components/CsvPdfComposer'
 
 
@@ -194,56 +194,7 @@ export function TextToHandwriting() {
   return <ToolPage toolId="text-to-handwriting"><div className="composer-layout"><div className="tool-panel"><FormGroup label="Text"><textarea className="form-textarea composer-editor" value={text} onChange={(event) => setText(event.target.value)} /></FormGroup><div className="form-grid"><FormGroup label="Writing style"><select className="form-select" value={options.fontFamily} onChange={(event) => change('fontFamily', event.target.value)}><option value={'"Segoe Print", cursive'}>Natural print</option><option value={'"Comic Sans MS", cursive'}>Casual</option><option value={'cursive'}>Script</option><option value={'Georgia, serif'}>Formal</option></select></FormGroup><FormGroup label="Ink"><input className="form-input" type="color" value={options.ink} onChange={(event) => change('ink', event.target.value)} /></FormGroup><FormGroup label="Paper"><select className="form-select" value={options.paper} onChange={(event) => change('paper', event.target.value)}><option value="ivory">Ivory</option><option value="white">White</option><option value="cream">Cream</option></select></FormGroup><FormGroup label="Rules"><select className="form-select" value={options.rules} onChange={(event) => change('rules', event.target.value)}><option value="blue">Blue ruled</option><option value="gray">Gray ruled</option><option value="none">Blank</option></select></FormGroup><FormGroup label="Text size"><input className="form-input" type="number" min="24" max="64" value={options.fontSize} onChange={(event) => change('fontSize', event.target.value)} /></FormGroup><FormGroup label="Line spacing"><input className="form-input" type="number" min="44" max="90" value={options.lineHeight} onChange={(event) => change('lineHeight', event.target.value)} /></FormGroup></div><button className="btn btn-primary btn-lg" disabled={busy || !text.trim()} onClick={create}><Download size={17} /> Create handwriting PDF</button></div><div className="tool-panel document-preview"><span className="preview-label">Handwriting preview</span><div className="paper-preview handwriting-preview" style={{ fontFamily: options.fontFamily, color: options.ink, fontSize: options.fontSize / 3, lineHeight: `${options.lineHeight / options.fontSize}` }}>{text}</div></div></div></ToolPage>
 }
 
-export function EbookToPdf() {
-  const { showToast } = useApp()
-  const editorRef = useRef(null)
-  const [markup, setMarkup] = useState('')
-  const [title, setTitle] = useState('')
-  const [chapterCount, setChapterCount] = useState(0)
-  const [busy, setBusy] = useState(false)
-  const [options, setOptions] = useState({ fontSize: 11, pageSize: 'A4', fontFamily: 'serif', margin: 48, lineHeight: 1.5 })
-  const change = (key, value) => setOptions((current) => ({ ...current, [key]: value }))
-  const importBook = async ([file]) => {
-    if (!file) return
-    setBusy(true)
-    try {
-      const book = await importEbook(file)
-      setMarkup(book.markup)
-      setTitle(book.title)
-      setChapterCount(book.chapters)
-      if (editorRef.current) editorRef.current.innerHTML = book.markup
-      showToast(`${book.chapters} chapter${book.chapters === 1 ? '' : 's'} imported.`, 'success')
-    } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
-  }
-  const create = async () => {
-    if (!markup.trim()) return showToast('Import a book or enter content.', 'warning')
-    setBusy(true)
-    try {
-      downloadBlob(await richHtmlToPdf(markup, { ...options, title }), `${title || 'ebook'}.pdf`)
-      showToast('Book PDF created.', 'success')
-    } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
-  }
-  const paste = (event) => {
-    event.preventDefault()
-    const html = event.clipboardData.getData('text/html')
-    document.execCommand(html ? 'insertHTML' : 'insertText', false, html ? sanitizeDocumentHtml(html) : event.clipboardData.getData('text/plain'))
-    setMarkup(sanitizeDocumentHtml(editorRef.current?.innerHTML || ''))
-  }
-  return <ToolPage toolId="ebook-to-pdf">
-    <div className="tool-panel"><DropZone accept={['.epub', '.txt', 'text/plain']} onFiles={importBook}><BookOpen size={30} /><div className="drop-zone-title">Drop an EPUB or TXT eBook</div><div className="drop-zone-sub">Keep chapter order, headings, lists, tables, and supported local images.</div></DropZone></div>
-    <div className="tool-panel"><div className="form-grid">
-      <FormGroup label="Book title"><input className="form-input" value={title} onChange={(event) => setTitle(event.target.value)} /></FormGroup>
-      <FormGroup label="Page size"><select className="form-select" value={options.pageSize} onChange={(event) => change('pageSize', event.target.value)}><option>A4</option><option>Letter</option></select></FormGroup>
-      <FormGroup label="Font"><select className="form-select" value={options.fontFamily} onChange={(event) => change('fontFamily', event.target.value)}><option value="serif">Serif</option><option value="sans-serif">Sans serif</option></select></FormGroup>
-      <FormGroup label="Font size"><input className="form-input" type="number" min="8" max="24" value={options.fontSize} onChange={(event) => change('fontSize', Number(event.target.value))} /></FormGroup>
-      <FormGroup label="Margins (points)"><input className="form-input" type="number" min="20" max="100" value={options.margin} onChange={(event) => change('margin', Number(event.target.value))} /></FormGroup>
-      <FormGroup label="Line spacing"><input className="form-input" type="number" min="1.1" max="2" step=".1" value={options.lineHeight} onChange={(event) => change('lineHeight', Number(event.target.value))} /></FormGroup>
-    </div>{chapterCount > 0 && <p className="form-hint">{chapterCount} chapters in reading order</p>}
-    <div ref={editorRef} className="paper-preview rich-editor ebook-editor" contentEditable suppressContentEditableWarning aria-label="Book content" onPaste={paste} onDrop={(event) => event.preventDefault()} onInput={() => setMarkup(sanitizeDocumentHtml(editorRef.current?.innerHTML || ''))} style={{ fontFamily: options.fontFamily, fontSize: options.fontSize, lineHeight: options.lineHeight }} />
-    </div><button className="btn btn-primary btn-lg" disabled={busy || !markup.trim()} onClick={create}><Download size={17} /> {busy ? 'Processing…' : 'Download PDF'}</button>
-  </ToolPage>
-}
-
+export function EbookToPdf() { return <EbookPdfComposer /> }
 
 export function CsvToPdf() { return <CsvPdfComposer /> }
 

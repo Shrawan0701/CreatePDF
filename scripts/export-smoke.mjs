@@ -157,6 +157,7 @@ try {
 
   await page.goto(`${baseUrl}/ebook-to-pdf`, { waitUntil: 'networkidle' })
   await page.locator('input[type="file"]').setInputFiles({ name: 'book.epub', mimeType: 'application/epub+zip', buffer: epubBytes })
+  await page.getByText('Edit book content', { exact: true }).click()
   await page.locator('.ebook-editor').getByText('Report title', { exact: true }).waitFor()
   const bookPdf = await getDocument({ data: new Uint8Array(await download('Download PDF', 'ebook.pdf')), useSystemFonts: true }).promise
   const bookFirstText = (await (await bookPdf.getPage(1)).getTextContent()).items.map((item) => item.str).join(' ')

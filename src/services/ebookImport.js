@@ -16,9 +16,11 @@ function resolveEntry(path, base) {
 }
 
 export async function importEbook(file) {
+  if (!/\.(epub|txt)$/i.test(file.name)) throw new Error('Choose an EPUB or TXT file.')
   if (!file.name.toLowerCase().endsWith('.epub')) {
     const text = await file.text()
-    return { title: file.name.replace(/\.[^.]+$/, ''), chapters: 1, markup: text.split(/\r?\n\s*\r?\n/).map((paragraph) => `<p>${escapeText(paragraph).replace(/\r?\n/g, '<br/>')}</p>`).join('') }
+    if (!text.trim()) throw new Error('This text file is empty.')
+    return { title: file.name.replace(/\.[^.]+$/, ''), author: '', contents: [], chapters: 1, markup: text.split(/\r?\n\s*\r?\n/).map((paragraph) => `<p>${escapeText(paragraph).replace(/\r?\n/g, '<br/>')}</p>`).join('') }
   }
   const zip = await JSZip.loadAsync(file)
   const uncompressed = Object.values(zip.files).reduce((size, entry) => size + (entry._data?.uncompressedSize || 0), 0)
@@ -32,7 +34,9 @@ export async function importEbook(file) {
   const packageDocument = parseXml(packageXml, 'EPUB package')
   const manifest = new Map([...packageDocument.getElementsByTagNameNS('*', 'item')].map((item) => [item.getAttribute('id'), item.getAttribute('href')]))
   const title = packageDocument.getElementsByTagNameNS('*', 'title')[0]?.textContent || file.name.replace(/\.epub$/i, '')
+  const author = packageDocument.getElementsByTagNameNS('*', 'creator')[0]?.textContent || ''
   const chapters = []
+  const contents = []
   for (const item of packageDocument.getElementsByTagNameNS('*', 'itemref')) {
     if (item.getAttribute('linear') === 'no') continue
     const href = manifest.get(item.getAttribute('idref'))
@@ -52,8 +56,12 @@ export async function importEbook(file) {
       else image.removeAttribute('src')
     }
     const markup = sanitizeDocumentHtml(body.innerHTML)
-    if (markup.trim()) chapters.push(`<section${chapters.length ? ' data-page-break="before"' : ''}>${markup}</section>`)
+    if (markup.trim()) {
+      const heading = [...body.getElementsByTagNameNS('*', '*')].find(element => /^h[1-3]$/.test(element.localName))
+      contents.push(heading?.textContent?.trim() || `Chapter ${chapters.length + 1}`)
+      chapters.push(`<section${chapters.length ? ' data-page-break="before"' : ''}>${markup}</section>`)
+    }
   }
   if (!chapters.length) throw new Error('No readable chapters were found in the EPUB.')
-  return { title, chapters: chapters.length, markup: chapters.join('') }
+  return { title, author, contents, chapters: chapters.length, markup: chapters.join('') }
 }
