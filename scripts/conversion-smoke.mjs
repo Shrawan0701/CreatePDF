@@ -225,9 +225,9 @@ try {
     ['html-to-pdf', '<h1>Rich heading</h1><table><tr><th>Item</th><th>Price</th></tr><tr><td>Apple</td><td>12</td></tr></table>'],
   ]) {
     await browserPage.goto(`${baseUrl}/${route}`, { waitUntil: 'networkidle' })
-    await browserPage.locator('.composer-editor').fill(content)
+    await browserPage.locator(route === 'markdown-to-pdf' ? '.markdown-source-editor' : '.composer-editor').fill(content)
     const richDownloadPromise = browserPage.waitForEvent('download')
-    await browserPage.getByRole('button', { name: 'Create PDF' }).click()
+    await browserPage.getByRole('button', { name: route === 'markdown-to-pdf' ? 'Download PDF' : 'Create PDF', exact: true }).click()
     const richDownload = await richDownloadPromise
     const richPath = join(temp, `${route}.pdf`)
     await richDownload.saveAs(richPath)

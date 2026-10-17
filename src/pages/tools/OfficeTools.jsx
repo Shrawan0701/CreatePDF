@@ -7,13 +7,10 @@ import { ToolPage } from '../../components/ToolPage'
 import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
 import { extractEmbeddedImages, extractLayout } from '../../services/pdfEngine'
-import { richHtmlToPdf } from '../../services/richPdf'
 import { pdfToEpub, pdfToHtml, pdfToPresentation, pdfToWorkbook } from '../../services/documentExports'
 import { wordToPdf, powerpointToPdf } from '../../services/wordImport'
 import { parseCsv } from '../../services/csv'
-
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
-
+import { spreadsheetTablesToPdf } from '../../services/spreadsheetPdf'
 
 function excelCellText(value) {
   if (value == null) return ''
@@ -47,21 +44,20 @@ async function loadWorkbook(file) {
 async function workbookToPdf(workbook, selected, options) {
   const sheets = workbook.worksheets.filter((sheet) => selected.includes(sheet.name))
   if (!sheets.length) throw new Error('Select at least one worksheet.')
-  const html = sheets.map((sheet, sheetIndex) => {
+  const tables = sheets.map((sheet) => {
     const rows = []
     sheet.eachRow({ includeEmpty: false }, (row) => {
       const cells = []
       for (let index = 1; index <= sheet.columnCount; index++) {
         const cell = row.getCell(index)
         const value = spreadsheetCellText(cell)
-        cells.push(`<td>${escapeHtml(value)}</td>`)
+        cells.push(value)
       }
-      rows.push(`<tr>${cells.join('')}</tr>`)
+      rows.push(cells)
     })
-    const heading = options.includeSheetNames === false ? '' : `<h2>${escapeHtml(sheet.name)}</h2>`
-    return `<section${sheetIndex ? ' data-page-break="before"' : ''}>${heading}<table>${rows.join('')}</table></section>`
-  }).join('')
-  return richHtmlToPdf(html || '<p>Empty workbook</p>', { ...options, tableMinColumnWidth: options.scaling === 'compact' ? 45 : 65 })
+    return { name: sheet.name, rows }
+  })
+  return spreadsheetTablesToPdf(tables, options)
 }
 
 function ImportTool({ toolId, accept, convert, note, retainDownload = false, successMessage = 'Conversion completed locally.' }) {

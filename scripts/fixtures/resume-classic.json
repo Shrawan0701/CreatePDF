@@ -1,0 +1,57 @@
+{
+  "template": "classic",
+  "name": "Alex Sharma",
+  "title": "Backend Developer",
+  "email": "alex.sharma@example.com",
+  "phone": "+91 98765 43210",
+  "location": "Pune, India",
+  "summary": "Backend developer experienced in **<span data-resume-color=\"#0d7865\">Java, Spring Boot, and PostgreSQL</span>**. I build reliable APIs, improve application performance, and collaborate with frontend teams to deliver accessible products.",
+  "links": [
+    { "label": "GitHub", "url": "https://github.com" },
+    { "label": "LinkedIn", "url": "https://linkedin.com" },
+    { "label": "Portfolio", "url": "https://example.com" }
+  ],
+  "experience": [
+    {
+      "role": "Software Engineer",
+      "organization": "Example Technologies",
+      "location": "Pune, India",
+      "start": "June 2024",
+      "end": "Present",
+      "details": "Developed REST APIs using **Java and Spring Boot** for a customer management platform.\nReduced average API response time by **<span data-resume-color=\"#0d7865\">35%</span>** through query optimization and caching.\nImplemented authentication and role-based permissions using Spring Security.\nCollaborated with designers and frontend developers to deliver three major releases.\nDocumented API endpoints and wrote integration tests for critical workflows."
+    }
+  ],
+  "education": [
+    {
+      "degree": "B.E. in Computer Engineering",
+      "institution": "Example Institute of Technology",
+      "location": "Pune, India",
+      "start": "August 2020",
+      "end": "May 2024",
+      "details": "Graduated with a CGPA of **8.6/10**.\nCompleted coursework in databases, operating systems, and computer networks.\nLed a four-person team for the final-year project."
+    }
+  ],
+  "skills": "Java, Spring Boot, Spring Security, REST APIs, PostgreSQL, Redis, React, Git, Docker, Unit Testing",
+  "projects": [
+    {
+      "name": "Document Management Platform",
+      "role": "Java, React, PostgreSQL",
+      "url": "https://example.com/projects/documents",
+      "details": "Built a platform for uploading, organizing, and searching documents.\nAdded secure user access and an activity history for document changes.\nDesigned a responsive interface for desktop and mobile users.\nRead the [project overview](https://example.com/projects/documents)."
+    }
+  ],
+  "custom": [
+    {
+      "id": "certifications",
+      "title": "Certifications & Achievements",
+      "details": "Completed a Java backend development certification.\nSolved more than 200 data structures and algorithms exercises.\nPresented a technical workshop on building REST APIs."
+    }
+  ],
+  "design": {
+    "sectionDividers": "below",
+    "dividerColor": "#94a3b8",
+    "dividerWidth": 0.6,
+    "bodyColor": "#1f2937",
+    "linkColor": "#175cd3"
+  }
+}

@@ -1,53 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Download, Link2, RotateCcw, Save, Send } from 'lucide-react'
+import { Download, Link2, RotateCcw, Send } from 'lucide-react'
 import { ToolPage } from '../../components/ToolPage'
-import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob, generateId } from '../../components/ui'
+import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
-import { richHtmlToPdf } from '../../services/richPdf'
-import { getResumes, saveResume } from '../../services/storage'
+import { ResumeComposer } from '../../components/ResumeComposer'
 
-const emptyResume = () => ({ id: generateId(), name: '', title: '', email: '', phone: '', summary: '', experience: '', education: '', skills: '', projects: '', template: 'modern' })
-const escapeResumeText = (value) => String(value || '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
-const resumeTemplates = {
-  modern: { label: 'Modern', fontFamily: 'sans-serif', headingColor: '#0d7865', margin: 46, fontSize: 11, lineHeight: 1.35 },
-  classic: { label: 'Classic', fontFamily: 'serif', headingColor: '#202938', margin: 50, fontSize: 11, lineHeight: 1.4 },
-  compact: { label: 'Compact', fontFamily: 'sans-serif', headingColor: '#155e75', margin: 36, fontSize: 10, lineHeight: 1.2 },
-}
-function resumeHtml(data) {
-  const contact = [data.email ? `<a href="mailto:${escapeResumeText(data.email)}">${escapeResumeText(data.email)}</a>` : '', data.phone ? `<a href="tel:${escapeResumeText(data.phone.replace(/[^+0-9]/g, ''))}">${escapeResumeText(data.phone)}</a>` : ''].filter(Boolean).join(' · ')
-  const sections = [['Profile', data.summary], ['Experience', data.experience], ['Education', data.education], ['Skills', data.skills], ['Projects', data.projects]].filter(([, value]) => value?.trim())
-  return `<h1>${escapeResumeText(data.name || 'Your Name')}</h1><p><strong>${escapeResumeText(data.title)}</strong></p><p>${contact}</p><hr/>${sections.map(([heading, value]) => `<h3>${heading}</h3>${value.split(/\r?\n/).filter((line) => line.trim()).map((line) => `<p>${escapeResumeText(line)}</p>`).join('')}`).join('')}`
-}
 
-export function ResumeBuilder() {
-  const { showToast } = useApp()
-  const [data, setData] = useState(emptyResume)
-  const [saved, setSaved] = useState([])
-  const [busy, setBusy] = useState(false)
-  useEffect(() => { getResumes().then((items) => { setSaved(items); if (items[0]) setData({ ...emptyResume(), ...items[0] }) }).catch((error) => showToast(error.message, 'error')) }, [showToast])
-  const template = resumeTemplates[data.template] || resumeTemplates.modern
-  const markup = resumeHtml(data)
-  const field = (key, label, area = false) => <FormGroup label={label}>{area ? <textarea className="form-textarea" value={data[key] || ''} onChange={(event) => setData({ ...data, [key]: event.target.value })} /> : <input className="form-input" value={data[key] || ''} onChange={(event) => setData({ ...data, [key]: event.target.value })} />}</FormGroup>
-  const save = async () => {
-    try { await saveResume({ ...data, updatedAt: Date.now() }); setSaved(await getResumes()); showToast('Resume saved locally.', 'success') } catch (error) { showToast(error.message, 'error') }
-  }
-  const pdf = async () => {
-    setBusy(true)
-    try {
-      downloadBlob(await richHtmlToPdf(markup, { ...template, title: `${data.name || 'Resume'} — Resume` }), `${data.name || 'resume'}.pdf`)
-      showToast('Resume PDF created.', 'success')
-    } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
-  }
-  return <ToolPage toolId="resume-builder"><div className="composer-layout">
-    <div className="tool-panel form-grid">
-      <FormGroup label="Template"><select className="form-select" value={data.template} onChange={(event) => setData({ ...data, template: event.target.value })}>{Object.entries(resumeTemplates).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></FormGroup>
-      {saved.length > 0 && <FormGroup label="Saved resume"><select className="form-select" value={saved.some((resume) => resume.id === data.id) ? data.id : ''} onChange={(event) => { const selected = saved.find((resume) => resume.id === event.target.value); if (selected) setData({ ...emptyResume(), ...selected }) }}><option value="">Choose saved resume</option>{saved.map((resume) => <option value={resume.id} key={resume.id}>{resume.name || 'Untitled resume'}</option>)}</select></FormGroup>}
-      {field('name', 'Full name')}{field('title', 'Professional title')}{field('email', 'Email')}{field('phone', 'Phone')}{field('summary', 'Profile', true)}{field('experience', 'Experience', true)}{field('education', 'Education', true)}{field('skills', 'Skills', true)}{field('projects', 'Projects', true)}
-      <div className="action-row"><button className="btn btn-secondary" onClick={() => setData(emptyResume())}>New resume</button><button className="btn btn-secondary" onClick={save}><Save size={15} /> Save locally</button><button className="btn btn-primary" disabled={busy} onClick={pdf}><Download size={15} /> {busy ? 'Creating…' : 'Download PDF'}</button></div>
-    </div>
-    <div className="tool-panel"><div className="resume-preview" style={{ fontFamily: template.fontFamily, fontSize: template.fontSize, lineHeight: template.lineHeight, '--resume-accent': template.headingColor }} dangerouslySetInnerHTML={{ __html: markup }} /></div>
-  </div></ToolPage>
-}
+export function ResumeBuilder() { return <ResumeComposer /> }
 
 export function P2PShare() {
   const { showToast } = useApp()

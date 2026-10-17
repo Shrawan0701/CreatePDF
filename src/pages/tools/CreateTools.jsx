@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, BookOpen, Camera, Download, Image as ImageIcon, Table, Type } from 'lucide-react'
-import { marked } from 'marked'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, BookOpen, Camera, Download, Image as ImageIcon, Type } from 'lucide-react'
 import { ToolPage } from '../../components/ToolPage'
 import { DocumentPdfPreview } from '../../components/DocumentPdfPreview'
+import { CreatePdfComposer } from '../../components/CreatePdfComposer'
+import { MarkdownPdfComposer } from '../../components/MarkdownPdfComposer'
 import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
 import { extractText, getPdfLib, imagesToPdf } from '../../services/pdfEngine'
 import { richHtmlToPdf, sanitizeDocumentHtml } from '../../services/richPdf'
 import { styledHtmlToPdf } from '../../services/htmlImport'
 import { importEbook } from '../../services/ebookImport'
-import { parseCsv } from '../../services/csv'
+import { CsvPdfComposer } from '../../components/CsvPdfComposer'
 
 
 async function handwritingTextToPdf(text, options = {}) {
@@ -180,8 +181,8 @@ function TextDocumentTool({ toolId, initialText = '', transform = (value) => val
   </div></ToolPage>
 }
 
-export function CreatePdf() { return <TextDocumentTool toolId="create-pdf" initialText={'<h1>Document title</h1><p>Start writing your document here.</p>'} helper="Format text, add tables and local images, then download a PDF." rich /> }
-export function MarkdownToPdf() { return <TextDocumentTool toolId="markdown-to-pdf" initialText={'# Document title\n\nWrite **Markdown** here.\n\n- Lists\n- Links\n- Code'} transform={(value) => marked.parse(value)} helper="Markdown headings, lists, code, and tables render in the PDF." /> }
+export function CreatePdf() { return <CreatePdfComposer /> }
+export function MarkdownToPdf() { return <MarkdownPdfComposer /> }
 export function HtmlToPdf() { return <TextDocumentTool toolId="html-to-pdf" initialText={'<h1>Document title</h1>\n<p>Paste HTML here, including its CSS.</p>'} helper="HTML and CSS are rendered on this app’s server. Grids, colors, inline styles and public HTTPS assets are preserved. Scripts stay disabled; use embedded images for files stored on your computer." /> }
 export function TextToHandwriting() {
   const { showToast } = useApp()
@@ -244,26 +245,7 @@ export function EbookToPdf() {
 }
 
 
-export function CsvToPdf() {
-  const { showToast } = useApp()
-  const [csv, setCsv] = useState('Name,Quantity,Price\nExample,2,99.00')
-  const [selected, setSelected] = useState(null)
-  const [orientation, setOrientation] = useState('portrait')
-  const parsed = useMemo(() => { try { return { rows: parseCsv(csv), error: '' } } catch (error) { return { rows: [], error: error.message } } }, [csv])
-  const columns = parsed.rows[0]?.map((value, index) => ({ index, label: value || `Column ${index + 1}` })) || []
-  const activeColumns = columns.filter(({ index }) => !selected || selected.includes(index))
-  const create = async () => {
-    if (parsed.error) return showToast(parsed.error, 'error')
-    if (!parsed.rows.length || !activeColumns.length) return showToast('Select at least one CSV column.', 'warning')
-    try {
-      const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
-      const markup = `<table>${parsed.rows.map((row, rowIndex) => `<tr>${activeColumns.map(({ index }) => rowIndex === 0 ? `<th>${escape(row[index])}</th>` : `<td>${escape(row[index])}</td>`).join('')}</tr>`).join('')}</table>`
-      downloadBlob(await richHtmlToPdf(markup, { orientation }), 'table.pdf')
-      showToast('Table PDF created.', 'success')
-    } catch (error) { showToast(error.message, 'error') }
-  }
-  return <ToolPage toolId="csv-to-pdf"><div className="composer-layout"><div className="tool-panel"><DropZone accept={['.csv', 'text/csv']} onFiles={async ([file]) => file && setCsv(await file.text())}><Table size={28} /><div className="drop-zone-title">Import CSV</div></DropZone><textarea className="form-textarea composer-editor" value={csv} onChange={(event) => setCsv(event.target.value)} />{parsed.error && <p className="form-hint">{parsed.error}</p>}<FormGroup label="Page orientation"><select className="form-select" value={orientation} onChange={(event) => setOrientation(event.target.value)}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></FormGroup><div className="tool-panel-title">Columns to include</div><div className="action-row">{columns.map(({ index, label }) => <label className="check-row" key={index}><input type="checkbox" checked={!selected || selected.includes(index)} onChange={(event) => setSelected((current) => { const included = current || columns.map((column) => column.index); return event.target.checked ? [...included, index].sort((left, right) => left - right) : included.filter((value) => value !== index) })} /> {label}</label>)}</div><button className="btn btn-primary" onClick={create}><Download size={16} /> Create table PDF</button></div><div className="tool-panel table-preview"><table><tbody>{parsed.rows.slice(0, 30).map((row, rowIndex) => <tr key={rowIndex}>{activeColumns.map(({ index }) => rowIndex === 0 ? <th key={index}>{row[index]}</th> : <td key={index}>{row[index]}</td>)}</tr>)}</tbody></table></div></div></ToolPage>
-}
+export function CsvToPdf() { return <CsvPdfComposer /> }
 
 function ImagePdfTool({ toolId, camera = false }) {
   const { showToast } = useApp()
