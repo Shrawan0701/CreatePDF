@@ -1788,6 +1788,11 @@ input, textarea, select {
 .ebook-chapter-list li { padding: 5px 0; }
 .ebook-composer-layout .ebook-editor { min-height: 260px; max-height: 560px; padding: 18px; border: 1px solid var(--border); }
 
+.word-export-layout > * { min-width: 0; }
+.word-export-options { display: grid; gap: 12px; margin: 18px 0; }
+.word-export-result { margin-top: 18px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface-2); }
+.word-export-result p { margin: 6px 0 0; font-size: 13px; }
+
 /* Print styles */
 @media print {
   .sidebar, .topbar, .no-print { display: none !important; }

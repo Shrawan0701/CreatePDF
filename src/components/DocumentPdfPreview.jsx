@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { getPdfjsLib } from '../services/pdfEngine'
 
-export function DocumentPdfPreview({ blob, updating, error, empty, emptyLabel = 'Add HTML to preview' }) {
+export function DocumentPdfPreview({ blob, updating, error, empty, emptyLabel = 'Add HTML to preview', heading = 'PDF preview', readyLabel = 'Matches your download' }) {
   const viewportRef = useRef(null)
   const canvasRef = useRef(null)
   const [documentState, setDocumentState] = useState(null)
@@ -70,7 +70,7 @@ export function DocumentPdfPreview({ blob, updating, error, empty, emptyLabel = 
   const ready = rendered?.pdf === pdf && rendered?.page === currentPage && rendered?.zoom === zoom && rendered?.bounds === bounds
   const message = error || renderError
   return <div className="tool-panel document-preview pdf-document-preview" aria-busy={updating}>
-    <div className="pdf-preview-heading"><h2 className="tool-panel-title">PDF preview</h2><span className="form-hint" role="status">{empty ? emptyLabel : updating ? 'Updating preview…' : message ? 'Preview unavailable' : 'Matches your download'}</span></div>
+    <div className="pdf-preview-heading"><h2 className="tool-panel-title">{heading}</h2><span className="form-hint" role="status">{empty ? emptyLabel : updating ? 'Updating preview…' : message ? 'Preview unavailable' : readyLabel}</span></div>
     <div className="pdf-preview-toolbar">
       <div className="pdf-preview-navigation">
         <button className="btn btn-secondary btn-icon btn-sm" aria-label="Previous preview page" disabled={!pdf || currentPage <= 1} onClick={() => setPageNumber(currentPage - 1)}><ChevronLeft size={16} /></button>

@@ -416,73 +416,10 @@ export async function pdfToAllJpegs(file, scale = 1.5, onProgress, format = 'jpe
   return blobs;
 }
 
-function pdfImageToCanvas(image) {
-  const canvas = document.createElement('canvas');
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext('2d');
-  if (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) {
-    context.drawImage(image, 0, 0);
-    return canvas;
-  }
-  if (image.bitmap) {
-    context.drawImage(image.bitmap, 0, 0, image.width, image.height);
-    return canvas;
-  }
-  const source = image.data;
-  if (!source) throw new Error('Unsupported embedded image format.');
-  const pixels = new Uint8ClampedArray(image.width * image.height * 4);
-  const channels = source.length / (image.width * image.height);
-  for (let pixel = 0; pixel < image.width * image.height; pixel++) {
-    const sourceOffset = pixel * channels;
-    const targetOffset = pixel * 4;
-    if (channels >= 3) {
-      pixels[targetOffset] = source[sourceOffset];
-      pixels[targetOffset + 1] = source[sourceOffset + 1];
-      pixels[targetOffset + 2] = source[sourceOffset + 2];
-      pixels[targetOffset + 3] = channels >= 4 ? source[sourceOffset + 3] : 255;
-    } else {
-      pixels[targetOffset] = pixels[targetOffset + 1] = pixels[targetOffset + 2] = source[sourceOffset];
-      pixels[targetOffset + 3] = 255;
-    }
-  }
-  context.putImageData(new ImageData(pixels, image.width, image.height), 0, 0);
-  return canvas;
-}
-
-export async function extractEmbeddedImages(file, onProgress) {
-  const pdfjs = await getPdfjsLib();
-  const source = await pdfjs.getDocument({ data: await loadPdfBytes(file) }).promise;
-  const results = [];
-  const seen = new Set();
-  for (let pageNumber = 1; pageNumber <= source.numPages; pageNumber++) {
-    const page = await source.getPage(pageNumber);
-    const operators = await page.getOperatorList();
-    for (let index = 0; index < operators.fnArray.length; index++) {
-      const operation = operators.fnArray[index];
-      let image;
-      let key;
-      if (operation === pdfjs.OPS.paintInlineImageXObject) {
-        image = operators.argsArray[index][0];
-        key = `inline-${pageNumber}-${index}`;
-      } else if (operation === pdfjs.OPS.paintImageXObject || operation === pdfjs.OPS.paintJpegXObject) {
-        const objectName = operators.argsArray[index][0];
-        key = `${pageNumber}-${objectName}`;
-        image = await new Promise((resolve) => page.objs.get(objectName, resolve));
-      }
-      if (!image || seen.has(key)) continue;
-      seen.add(key);
-      try {
-        const canvas = pdfImageToCanvas(image);
-        const blob = await new Promise((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('Image encoding failed.')), 'image/png'));
-        results.push({ blob, name: `page-${pageNumber}-image-${results.length + 1}.png`, width: image.width, height: image.height });
-      } catch {
-        // Unsupported masks and color spaces are skipped; callers can offer rendered-page fallback.
-      }
-    }
-    if (onProgress) onProgress(Math.round(pageNumber / source.numPages * 100));
-  }
-  return results;
+// Retain the shared array-returning API used by existing tools and integrations.
+export async function extractEmbeddedImages(file, onProgress, options = {}) {
+  const { extractPdfImages } = await import('./pdfImages');
+  return (await extractPdfImages(file, options, onProgress)).images;
 }
 
 export async function createZipFromBlobs(items) {

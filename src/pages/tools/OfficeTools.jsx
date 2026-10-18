@@ -1,13 +1,14 @@
 import { memo, useEffect, useMemo, useState } from 'react'
-import { Download, FileInput, FileOutput, FileText } from 'lucide-react'
+import { Download, FileInput, FileOutput } from 'lucide-react'
 import ExcelJS from 'exceljs'
-import JSZip from 'jszip'
-import { Document, Packer, Paragraph, Table, TableCell, TableRow } from 'docx'
+import { PdfImageExtractor } from '../../components/PdfImageExtractor'
+import { PdfHtmlExporter } from '../../components/PdfHtmlExporter'
+import { PdfEpubExporter } from '../../components/PdfEpubExporter'
+import { PdfWordExporter } from '../../components/PdfWordExporter'
 import { ToolPage } from '../../components/ToolPage'
 import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
-import { extractEmbeddedImages, extractLayout } from '../../services/pdfEngine'
-import { pdfToEpub, pdfToHtml, pdfToPresentation, pdfToWorkbook } from '../../services/documentExports'
+import { pdfToPresentation, pdfToWorkbook } from '../../services/documentExports'
 import { wordToPdf, powerpointToPdf } from '../../services/wordImport'
 import { parseCsv } from '../../services/csv'
 import { spreadsheetTablesToPdf } from '../../services/spreadsheetPdf'
@@ -139,32 +140,6 @@ export function ExcelToPdf() {
 }
 export function PowerPointToPdf() { return <ImportTool toolId="powerpoint-to-pdf" accept={['.pptx']} note="Your presentation is sent to this app?s server to preserve slide layouts, then deleted after conversion." retainDownload successMessage="Presentation converted." convert={async (file, progress) => ({ blob: await powerpointToPdf(file, progress), name: file.name.replace(/\.pptx$/i, '.pdf') })} /> }
 
-function layoutTable(lines, pageWidth) {
-  const positions = []
-  for (const item of lines.flatMap((line) => line.items)) {
-    if (!positions.some((position) => Math.abs(position - item.x) < 14)) positions.push(item.x)
-  }
-  positions.sort((left, right) => left - right)
-  if (positions.length < 3 || positions.length > 12) return null
-  const cells = lines.map((line) => {
-    const row = Array(positions.length).fill('')
-    for (const item of line.items) {
-      const column = positions.reduce((best, position, index) => Math.abs(position - item.x) < Math.abs(positions[best] - item.x) ? index : best, 0)
-      row[column] = row[column] ? `${row[column]} ${item.text}` : item.text
-    }
-    return row
-  })
-  const pageLeft = positions[0]
-  const available = Math.max(4000, Math.round((pageWidth - pageLeft * 2) * 20))
-  const widths = positions.map((position, index) => {
-    const next = positions[index + 1] || pageWidth - pageLeft
-    return Math.max(500, Math.round((next - position) * 20))
-  })
-  const total = widths.reduce((sum, width) => sum + width, 0)
-  const columnWidths = widths.map((width) => Math.round(width / total * available))
-  return new Table({ columnWidths, rows: cells.map((row) => new TableRow({ children: row.map((text) => new TableCell({ children: [new Paragraph(text)] })) })) })
-}
-
 function ExportTool({ toolId, format }) {
   const { showToast } = useApp()
   const [file, setFile] = useState(null)
@@ -173,24 +148,16 @@ function ExportTool({ toolId, format }) {
   const [pageRange, setPageRange] = useState('')
   const [outputFormat, setOutputFormat] = useState('xlsx')
   const [tablesOnly, setTablesOnly] = useState(true)
-  const [packageAssets, setPackageAssets] = useState(false)
-  const [title, setTitle] = useState('')
-  const [fontFamily, setFontFamily] = useState('serif')
-  const [fontSize, setFontSize] = useState(100)
-  const [lineHeight, setLineHeight] = useState(1.5)
-  const [readingLayout, setReadingLayout] = useState('reflow')
   const notes = {
     xlsx: 'Extract detected table rows from selected pages into Excel or CSV.',
     pptx: 'Each PDF page becomes a slide image. Page proportions are preserved.',
-    html: 'Keep page appearance, selectable text, and supported links in HTML.',
-    epub: 'Create a book with a contents page. Scanned pages are included as images.',
   }
   const run = async () => {
     setBusy(true)
     setProgress(0)
     try {
-      const convert = { xlsx: pdfToWorkbook, pptx: pdfToPresentation, html: pdfToHtml, epub: pdfToEpub }[format]
-      const result = await convert(file, { pageRange, outputFormat, tablesOnly, packageAssets, title, fontFamily, fontSize, lineHeight, readingLayout }, setProgress)
+      const convert = { xlsx: pdfToWorkbook, pptx: pdfToPresentation }[format]
+      const result = await convert(file, { pageRange, outputFormat, tablesOnly }, setProgress)
       downloadBlob(result.blob, `${file.name.replace(/\.pdf$/i, '')}.${result.extension}`)
       showToast(`${result.extension.toUpperCase()} created.`, 'success')
     } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) }
@@ -200,26 +167,14 @@ function ExportTool({ toolId, format }) {
     <div className="tool-panel"><div className="form-grid">
       <FormGroup label="Pages" hint="Leave blank for all pages"><input className="form-input" value={pageRange} onChange={(event) => setPageRange(event.target.value)} placeholder="1-3, 5" /></FormGroup>
       {format === 'xlsx' && <><FormGroup label="Output format"><select className="form-select" value={outputFormat} onChange={(event) => setOutputFormat(event.target.value)}><option value="xlsx">Excel workbook (.xlsx)</option><option value="csv">CSV (ZIP for multiple pages)</option></select></FormGroup><label className="check-row"><input type="checkbox" checked={tablesOnly} onChange={(event) => setTablesOnly(event.target.checked)} /> Include detected table rows only</label></>}
-      {format === 'html' && <label className="check-row"><input type="checkbox" checked={packageAssets} onChange={(event) => setPackageAssets(event.target.checked)} /> Package HTML and page images in a ZIP</label>}
-      {format === 'epub' && <><FormGroup label="Book title"><input className="form-input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder={file?.name.replace(/\.pdf$/i, '') || 'Book title'} /></FormGroup><FormGroup label="Reading layout"><select className="form-select" value={readingLayout} onChange={(event) => setReadingLayout(event.target.value)}><option value="reflow">Reflow text for reading</option><option value="pages">Keep pages as images</option></select></FormGroup><FormGroup label="Reading font"><select className="form-select" value={fontFamily} onChange={(event) => setFontFamily(event.target.value)}><option value="serif">Serif</option><option value="sans-serif">Sans serif</option></select></FormGroup><FormGroup label="Text size (%)"><input className="form-input" type="number" min="80" max="160" value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} /></FormGroup><FormGroup label="Line spacing"><input className="form-input" type="number" min="1.2" max="2" step="0.1" value={lineHeight} onChange={(event) => setLineHeight(Number(event.target.value))} /></FormGroup></>}
     </div></div>
     {busy && <ProgressBar value={progress} label={`Creating ${format.toUpperCase()}`} />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Download {(format === 'xlsx' ? outputFormat : format).toUpperCase()}</button>
   </ToolPage>
 }
-function LayoutWordTool() {
-  const { showToast } = useApp(); const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0)
-  const run = async () => { setBusy(true); try { const pages = await extractLayout(file, setProgress); const children = []; pages.forEach((page, pageIndex) => { if (pageIndex) children.push(new Paragraph({ pageBreakBefore: true })); const left = Math.min(...page.lines.flatMap((line) => line.items.map((item) => item.x)), 48); let index = 0; while (index < page.lines.length) { const group = [page.lines[index]]; while (index + group.length < page.lines.length && page.lines[index + group.length].items.length >= 3 && group.at(-1).items.length >= 3 && page.lines[index + group.length].y - group.at(-1).y < 40) group.push(page.lines[index + group.length]); if (group.length >= 2 && group[0].items.length >= 3) { const table = layoutTable(group, page.width); if (table) { children.push(table); index += group.length; continue } } const line = page.lines[index]; children.push(new Paragraph({ text: line.items.map((item) => item.text).join('    '), indent: { left: Math.max(0, Math.min(6000, Math.round(((line.items[0]?.x || left) - left) * 20))) } })); index += 1 } }); const doc = new Document({ sections: [{ children }] }); downloadBlob(await Packer.toBlob(doc), `${file.name.replace(/\.pdf$/i, '')}.docx`); showToast('DOCX created with detected table rows.', 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId="pdf-to-word"><div className="tool-panel"><DropZone accept={['application/pdf']} onFiles={([selected]) => setFile(selected)}><FileOutput size={30} /><div className="drop-zone-title">Choose a PDF</div><div className="drop-zone-sub">Preserves detected rows and columns as editable Word tables.</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => setFile(null)} /></div>}</div>{busy && <ProgressBar value={progress} label="Creating DOCX layout" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Download DOCX</button></ToolPage>
-}
-
-export const PdfToWord = LayoutWordTool
+export const PdfToWord = PdfWordExporter
 export const PdfToExcel = () => <ExportTool toolId="pdf-to-excel" format="xlsx" />
 export const PdfToPowerPoint = () => <ExportTool toolId="pdf-to-ppt" format="pptx" />
-export const PdfToHtml = () => <ExportTool toolId="pdf-to-html" format="html" />
-export const PdfToEpub = () => <ExportTool toolId="pdf-to-epub" format="epub" />
+export const PdfToHtml = PdfHtmlExporter
+export const PdfToEpub = PdfEpubExporter
 
-export function ExtractImages() {
-  const { showToast } = useApp(); const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0)
-  const run = async () => { setBusy(true); try { const images = await extractEmbeddedImages(file, setProgress); if (!images.length) throw new Error('No extractable embedded images were found. Use PDF to JPG to render complete pages.'); const zip = new JSZip(); images.forEach((image) => zip.file(image.name, image.blob)); downloadBlob(await zip.generateAsync({ type: 'blob' }), `${file.name.replace(/\.pdf$/i, '')}-images.zip`); showToast(`${images.length} embedded image${images.length === 1 ? '' : 's'} extracted.`, 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId="extract-images"><div className="tool-panel"><DropZone accept={['application/pdf']} onFiles={([selected]) => setFile(selected)}><FileText size={30} /><div className="drop-zone-title">Choose a PDF</div><div className="drop-zone-sub">Extracts embedded raster images without screenshotting complete pages.</div></DropZone>{file && <FileItem file={file} onRemove={() => setFile(null)} />}</div>{busy && <ProgressBar value={progress} label="Extracting embedded images" />}<button className="btn btn-primary" disabled={!file || busy} onClick={run}><Download size={16} /> Download images ZIP</button></ToolPage>
-}
+export const ExtractImages = PdfImageExtractor

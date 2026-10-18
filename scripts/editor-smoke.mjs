@@ -71,6 +71,7 @@ try {
 
   await page.goto(`${baseUrl}/extract-images`, { waitUntil: 'networkidle' })
   await page.locator('input[type="file"]').setInputFiles({ name: 'replaced.pdf', mimeType: 'application/pdf', buffer: replacedBytes })
+  await page.getByRole('button', { name: 'Extract images', exact: true }).click()
   const extracted = await JSZip.loadAsync(await download(page, page.getByRole('button', { name: 'Download images ZIP' }), 'images.zip'))
   const backgroundImage = Object.values(extracted.files).find((entry) => entry.name.endsWith('.png'))
   if (!backgroundImage) throw new Error('Edited page background could not be inspected')
@@ -95,7 +96,7 @@ try {
   for (const route of ['/', '/create-pdf', '/pos-billing', '/gst-invoice', '/pdf-to-excel', '/resume-builder']) {
     await mobile.goto(`${baseUrl}${route}`, { waitUntil: 'networkidle' })
     if (await mobile.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2)) throw new Error(`${route} overflows the mobile viewport`)
-    if (await mobile.locator('.topbar').evaluate((header) => header.scrollHeight > header.clientHeight + 2) || (await mobile.getByRole('button', { name: 'Open navigation' }).boundingBox()).width < 30) throw new Error(`${route} has a crowded or inaccessible mobile header`)
+    if (await mobile.locator('.workspace-header').evaluate((header) => header.scrollHeight > header.clientHeight + 2) || (await mobile.getByRole('button', { name: 'Toggle navigation' }).boundingBox()).width < 30) throw new Error(`${route} has a crowded or inaccessible mobile header`)
   }
   await open(mobile, normalBytes)
   await mobile.locator('.editor-bottom-dock').getByRole('button', { name: 'Text', exact: true }).click()

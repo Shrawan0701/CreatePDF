@@ -42,7 +42,7 @@ try {
 
   const openTool = async (route) => {
     await page.goto(`${baseUrl}/${route}`, { waitUntil: 'networkidle' })
-    await page.locator('input[type="file"]').setInputFiles({ name: 'report & notes.pdf', mimeType: 'application/pdf', buffer: sourceBytes })
+    await page.locator('input[type="file"]').first().setInputFiles({ name: 'report & notes.pdf', mimeType: 'application/pdf', buffer: sourceBytes })
   }
   const download = async (button, name) => {
     const pending = page.waitForEvent('download')
@@ -65,7 +65,7 @@ try {
   if ((await htmlPage.locator('.pdf-page').count()) !== 2 || remoteRequests.length) throw new Error('HTML layout failed or loaded remote assets')
   await htmlPage.close()
   await page.getByRole('checkbox', { name: 'Package HTML and page images in a ZIP' }).check()
-  const htmlZip = await JSZip.loadAsync(await download('Download HTML', 'pages.zip'))
+  const htmlZip = await JSZip.loadAsync(await download('Download ZIP', 'pages.zip'))
   if (!htmlZip.file('index.html') || !htmlZip.file('assets/page-1.png') || !htmlZip.file('assets/page-2.png')) throw new Error('HTML package omitted page assets')
 
   await openTool('pdf-to-epub')
@@ -140,8 +140,8 @@ try {
   const previewRemoteRequests = []
   await page.route('https://example.com/**', (route) => { previewRemoteRequests.push(route.request().url()); route.abort() })
   await page.locator('.composer-editor').fill('<h1>Safe import</h1><p>Local content</p><img src="https://example.com/remote.png"><div style="background-image:url(https://example.com/remote.jpg)">Safe body</div><script>alert(1)</script>')
-  await page.locator('.rich-preview').getByText('Safe body').waitFor()
-  if (await page.locator('.rich-preview img, .rich-preview script, .rich-preview [style]').count() || previewRemoteRequests.length) throw new Error('HTML preview loaded an unexpected remote resource')
+  await page.locator('.pdf-preview-viewport canvas[data-rendered-page="1"]').waitFor()
+  if (await page.locator('.pdf-preview-viewport img, .pdf-preview-viewport script').count() || previewRemoteRequests.length) throw new Error('HTML preview loaded an unexpected remote resource')
   const safeHtmlBytes = await download('Create PDF', 'safe-html.pdf')
   if ((await PDFDocument.load(safeHtmlBytes)).getPageCount() !== 1) throw new Error('Sanitized HTML did not produce a PDF')
   await page.locator('.composer-editor').fill(`<table><tr><th>Description</th><th>Amount</th></tr><tr><td>${'Long table cell content '.repeat(650)} EndOfLongCell</td><td>99</td></tr></table>`)

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { FileText, Trash2, Download, Image, Archive } from 'lucide-react';
 import { ToolPage, useToolState } from '../../components/ToolPage';
 import { DropZone, FileItem, ProgressBar, FormGroup, downloadBlob } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
-import { pdfToAllJpegs, createZipFromBlobs, getPdfLib, loadPdfBytes, extractText } from '../../services/pdfEngine';
+import { pdfToAllJpegs, createZipFromBlobs, loadPdfBytes, extractText } from '../../services/pdfEngine';
+import { emptyPdfMetadata, readPdfMetadata, updatePdfMetadata } from '../../services/pdfMetadata';
 
 // ===== PDF TO JPG =====
 export function PdfToJpg() {
@@ -155,71 +156,75 @@ export function ExtractText() {
 
 // ===== EDIT PDF METADATA =====
 export function EditMetadata() {
-  const { files, addFiles, reset, processing, progress, error, run } = useToolState();
   const { showToast } = useApp();
-  const [meta, setMeta] = useState({ title: '', author: '', subject: '', keywords: '', producer: '' });
+  const requestRef = useRef(0);
+  const [file, setFile] = useState(null);
+  const [meta, setMeta] = useState(emptyPdfMetadata);
   const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState('');
+
+  const reset = () => {
+    if (processing) return;
+    ++requestRef.current;
+    setFile(null); setMeta(emptyPdfMetadata()); setLoaded(false); setLoading(false); setError('');
+  };
 
   const handleFile = async (newFiles) => {
-    const pdfs = newFiles.filter((x) => x.type === 'application/pdf').slice(0, 1);
-    if (!pdfs.length) return;
-    addFiles(pdfs);
-      const { getPdfLib, loadPdfBytes } = await import('../../services/pdfEngine');
-    const { PDFDocument } = await getPdfLib();
-    const bytes = await loadPdfBytes(pdfs[0]);
-    const doc = await PDFDocument.load(bytes);
-    setMeta({
-      title: doc.getTitle() || '',
-      author: doc.getAuthor() || '',
-      subject: doc.getSubject() || '',
-      keywords: (doc.getKeywords() || []).join(', '),
-      producer: doc.getProducer() || '',
-    });
-    setLoaded(true);
+    if (processing) return;
+    const source = newFiles.find(item => item.type === 'application/pdf' || /\.pdf$/i.test(item.name));
+    if (!source) { setError('Choose a PDF file to edit its metadata.'); return; }
+    const request = ++requestRef.current;
+    setFile(source); setLoaded(false); setMeta(emptyPdfMetadata()); setLoading(true); setError('');
+    try {
+      const metadata = await readPdfMetadata(await loadPdfBytes(source));
+      if (request !== requestRef.current) return;
+      setMeta(metadata); setLoaded(true);
+    } catch (error) {
+      if (request !== requestRef.current) return;
+      const message = /encrypted|password/i.test(error.message) ? 'This PDF is password-protected. Unlock it before editing metadata.' : 'Could not read this PDF. Check that it is a valid, readable PDF file.';
+      setError(message); showToast(message, 'error');
+    } finally { if (request === requestRef.current) setLoading(false); }
   };
 
   const handleSave = async () => {
-    if (!files[0]) return;
-    await run(async (setProgress) => {
-      const { PDFDocument } = await getPdfLib();
-      const bytes = await loadPdfBytes(files[0]);
-      const doc = await PDFDocument.load(bytes);
-      doc.setTitle(meta.title);
-      doc.setAuthor(meta.author);
-      doc.setSubject(meta.subject);
-      doc.setKeywords(meta.keywords.split(',').map((s) => s.trim()));
-      doc.setProducer(meta.producer || 'CreatePDF.si');
-      setProgress(80);
-      const out = await doc.save();
-      downloadBlob(new Blob([out], { type: 'application/pdf' }), `metadata-${files[0].name}`);
+    if (!file || !loaded || loading || processing) return;
+    setProcessing(true); setError('');
+    try {
+      const output = await updatePdfMetadata(await loadPdfBytes(file), meta);
+      downloadBlob(output, `metadata-${file.name}`);
       showToast('Metadata saved!', 'success');
-    });
+    } catch (error) {
+      setError(error.message || 'Could not save the PDF metadata.');
+      showToast(error.message || 'Could not save the PDF metadata.', 'error');
+    } finally { setProcessing(false); }
   };
 
   return (
     <ToolPage toolId="edit-metadata">
       <div className="tool-panel">
-        <DropZone onFiles={handleFile} accept={['application/pdf']}>
+        <DropZone onFiles={handleFile} accept={['application/pdf', '.pdf']}>
           <div className="drop-zone-icon"><FileText size={28} /></div>
           <div className="drop-zone-title">Drop a PDF to edit metadata</div>
         </DropZone>
-        {files[0] && <div style={{ marginTop: 10 }}><FileItem file={files[0]} onRemove={() => { reset(); setLoaded(false); setMeta({ title: '', author: '', subject: '', keywords: '', producer: '' }); }} /></div>}
+        {file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={processing ? undefined : reset} /></div>}
       </div>
       {loaded && (
         <div className="tool-panel">
           <div className="tool-panel-title">Document Properties</div>
           {['title', 'author', 'subject', 'keywords', 'producer'].map((field) => (
             <FormGroup key={field} label={field.charAt(0).toUpperCase() + field.slice(1)}>
-              <input className="form-input" value={meta[field]} onChange={(e) => setMeta((m) => ({ ...m, [field]: e.target.value }))} />
+              <input className="form-input" disabled={processing} value={meta[field]} onChange={(e) => setMeta((m) => ({ ...m, [field]: e.target.value }))} />
             </FormGroup>
           ))}
         </div>
       )}
-      {error && <div style={{ color: 'var(--danger)', padding: 10, background: 'var(--danger-light)', borderRadius: 8, marginBottom: 12 }}>{error}</div>}
-      {processing && <ProgressBar value={progress} label="Saving…" />}
+      {error && <div role="alert" style={{ color: 'var(--danger)', padding: 10, background: 'var(--danger-light)', borderRadius: 8, marginBottom: 12 }}>{error}</div>}
+      {(loading || processing) && <ProgressBar value={null} label={loading ? 'Reading metadata…' : 'Saving…'} />}
       <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-        <button className="btn btn-primary btn-lg" onClick={handleSave} disabled={!files[0] || !loaded || processing}><Download size={18} /> Save Metadata</button>
-        {files[0] && <button className="btn btn-secondary" onClick={() => { reset(); setLoaded(false); }}><Trash2 size={16} /> Reset</button>}
+        <button className="btn btn-primary btn-lg" onClick={handleSave} disabled={!file || !loaded || loading || processing}><Download size={18} /> Save Metadata</button>
+        {file && <button className="btn btn-secondary" disabled={processing} onClick={reset}><Trash2 size={16} /> Reset</button>}
       </div>
     </ToolPage>
   );
