@@ -1,0 +1,32 @@
+.size-split .size-limit-fields { display: grid; grid-template-columns: minmax(0, 1fr) 85px; gap: 10px; }
+.size-split .size-limit-fields .form-group { margin-bottom: 0; }
+.size-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.size-presets button { padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; font-size: 10px; }
+.size-presets button[aria-pressed=true] { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+.size-presets button:disabled { opacity: .5; cursor: default; }
+.size-option-section { margin-top: 21px; padding-top: 19px; border-top: 1px solid var(--border); }
+.size-check { display: flex; gap: 9px; align-items: flex-start; font-size: 11px; color: var(--text-primary); line-height: 1.6; }
+.size-check input { margin-top: 3px; accent-color: var(--primary); flex-shrink: 0; }
+.size-before-results { padding: 14px 0 4px; }
+.size-before-results > p { font-size: 12px; line-height: 1.9; color: var(--text-secondary); }
+.size-source-stats { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-bottom: 16px; color: var(--text-secondary); font-size: 11px; }
+.size-source-stats strong { font-size: 21px; color: var(--text-primary); margin-left: auto; }
+.size-before-results .size-fits-note { display: flex; align-items: flex-start; gap: 8px; padding: 13px; background: var(--primary-light); border-radius: 7px; color: var(--primary); }
+.size-fits-note svg { flex-shrink: 0; margin-top: 3px; }
+.size-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+.size-summary > div { display: grid; gap: 7px; background: var(--bg-body); border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 0; }
+.size-summary span { font-size: 10px; color: var(--text-secondary); }
+.size-summary strong { font-size: 18px; letter-spacing: -.4px; color: var(--primary); overflow-wrap: anywhere; }
+.size-summary .has-warning { background: var(--warning-light); }
+.size-summary .has-warning strong { color: var(--text-primary); }
+.size-output-list .size-selected { background: var(--primary-light); border-radius: 7px; padding-left: 8px; padding-right: 8px; }
+.size-usage { height: 4px; max-width: 220px; background: var(--border); border-radius: 8px; overflow: hidden; margin: 2px 0; }
+.size-usage > span { display: block; height: 100%; background: var(--primary); border-radius: 8px; }
+.size-output-list .size-file-status { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); font-size: 9px; white-space: normal; }
+.size-output-list .size-file-status.exceeds { color: var(--text-primary); background: var(--warning-light); border-radius: 4px; padding: 4px 6px; width: fit-content; }
+.size-over-limit .size-usage > span { background: var(--text-secondary); }
+.size-split .split-warning a { color: var(--primary); text-decoration: underline; }
+.size-preview-controls { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 12px; color: var(--text-secondary); font-size: 11px; }
+.size-preview-controls .btn { font-size: 10px; }
+.size-split .split-settings > .form-group { margin: 0; }
+@media (max-width: 420px) { .size-summary { gap: 5px; } .size-summary > div { padding: 9px 7px; } .size-summary strong { font-size: 15px; } .size-summary span { font-size: 9px; } .size-preview-controls .btn { padding: 6px; } }

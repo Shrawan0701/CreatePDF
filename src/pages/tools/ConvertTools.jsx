@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
-import { FileText, Trash2, Download, Image, Archive } from 'lucide-react';
+import { FileText, Trash2, Download, Image } from 'lucide-react';
 import { ToolPage, useToolState } from '../../components/ToolPage';
 import { DropZone, FileItem, ProgressBar, FormGroup, downloadBlob } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
 import { pdfToAllJpegs, createZipFromBlobs, loadPdfBytes, extractText } from '../../services/pdfEngine';
 import { emptyPdfMetadata, readPdfMetadata, updatePdfMetadata } from '../../services/pdfMetadata';
+import { PdfZipWorkspace } from '../../components/PdfZipWorkspace';
 
 // ===== PDF TO JPG =====
 export function PdfToJpg() {
@@ -64,49 +65,7 @@ export function PdfToJpg() {
 }
 
 // ===== PDF TO ZIP =====
-export function PdfToZip() {
-  const { files, addFiles, reset, processing, progress, error, run } = useToolState();
-  const { showToast } = useApp();
-  const [scale, setScale] = useState(1.5);
-
-  const handleConvert = async () => {
-    if (!files[0]) return;
-    await run(async (setProgress) => {
-      const items = await pdfToAllJpegs(files[0], scale, setProgress);
-      const zip = await createZipFromBlobs(items);
-      downloadBlob(zip, `${files[0].name.replace('.pdf', '')}-pages.zip`);
-      showToast(`Packed ${items.length} pages into ZIP!`, 'success');
-    });
-  };
-
-  return (
-    <ToolPage toolId="pdf-to-zip">
-      <div className="tool-panel">
-        <DropZone onFiles={(f) => addFiles(f.filter((x) => x.type === 'application/pdf').slice(0, 1))} accept={['application/pdf']}>
-          <div className="drop-zone-icon"><Archive size={28} /></div>
-          <div className="drop-zone-title">Drop a PDF to package as ZIP</div>
-          <div className="drop-zone-sub">Each page exported as JPG image in a ZIP archive</div>
-        </DropZone>
-        {files[0] && <div style={{ marginTop: 10 }}><FileItem file={files[0]} onRemove={() => reset()} /></div>}
-      </div>
-      <div className="tool-panel">
-        <FormGroup label="Image quality">
-          <select className="form-select" value={scale} onChange={(e) => setScale(+e.target.value)} style={{ width: 200 }}>
-            <option value={1}>Standard</option>
-            <option value={1.5}>High</option>
-            <option value={2}>Very High</option>
-          </select>
-        </FormGroup>
-      </div>
-      {error && <div style={{ color: 'var(--danger)', padding: 10, background: 'var(--danger-light)', borderRadius: 8, marginBottom: 12 }}>{error}</div>}
-      {processing && <ProgressBar value={progress} label="Creating ZIP…" />}
-      <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-        <button className="btn btn-primary btn-lg" onClick={handleConvert} disabled={!files[0] || processing}><Download size={18} /> Package as ZIP</button>
-        {files[0] && <button className="btn btn-secondary" onClick={reset}><Trash2 size={16} /> Reset</button>}
-      </div>
-    </ToolPage>
-  );
-}
+export const PdfToZip = PdfZipWorkspace;
 
 // ===== EXTRACT TEXT =====
 export function ExtractText() {

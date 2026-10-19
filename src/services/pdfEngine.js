@@ -68,20 +68,10 @@ export async function mergePdfs(fileList, onProgress) {
   return new Blob([out], { type: 'application/pdf' });
 }
 
-export async function splitPdfByRanges(file, ranges) {
-  const { PDFDocument } = await getPdfLib();
-  const bytes = await loadPdfBytes(file);
-  const src = await PDFDocument.load(bytes);
-  const results = [];
-  for (const range of ranges) {
-    const dest = await PDFDocument.create();
-    const indices = range.map((n) => n - 1).filter((i) => i >= 0 && i < src.getPageCount());
-    const pages = await dest.copyPages(src, indices);
-    pages.forEach((p) => dest.addPage(p));
-    const out = await dest.save();
-    results.push(new Blob([out], { type: 'application/pdf' }));
-  }
-  return results;
+export async function splitPdfByRanges(file, ranges, options = {}) {
+  const { readSplitSource, splitLoadedPdf } = await import('./pdfSplit');
+  const source = await readSplitSource(file, options.signal);
+  return (await splitLoadedPdf(source, ranges, options)).map(result => result.blob);
 }
 
 export async function rotatePdfPages(file, rotations) {
@@ -99,36 +89,8 @@ export async function rotatePdfPages(file, rotations) {
 }
 
 export async function compressPdf(file, options = {}) {
-  const { mode = 'balanced', onProgress } = options;
-  const { PDFDocument } = await getPdfLib();
-  const bytes = await loadPdfBytes(file);
-  const pdfDoc = await PDFDocument.load(bytes);
-  pdfDoc.setTitle('');
-  pdfDoc.setAuthor('');
-  pdfDoc.setSubject('');
-  pdfDoc.setKeywords([]);
-  pdfDoc.setProducer('CreatePDF.si');
-  pdfDoc.setCreator('CreatePDF.si');
-  const optimized = await pdfDoc.save({ useObjectStreams: true });
-  if (mode === 'lossless') return new Blob([optimized], { type: 'application/pdf' });
-
-  const pdfjsLib = await getPdfjsLib();
-  const source = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
-  const output = await PDFDocument.create();
-  const settings = mode === 'strong' ? { scale: 1.05, quality: .55 } : { scale: 1.35, quality: .72 };
-  for (let pageNumber = 1; pageNumber <= source.numPages; pageNumber++) {
-    const sourcePage = await source.getPage(pageNumber);
-    const originalViewport = sourcePage.getViewport({ scale: 1 });
-    const canvas = await renderPageToCanvas(source, pageNumber, settings.scale);
-    const imageBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', settings.quality));
-    const image = await output.embedJpg(await imageBlob.arrayBuffer());
-    const page = output.addPage([originalViewport.width, originalViewport.height]);
-    page.drawImage(image, { x: 0, y: 0, width: originalViewport.width, height: originalViewport.height });
-    if (onProgress) onProgress(Math.round((pageNumber / source.numPages) * 90));
-  }
-  const rasterized = await output.save({ useObjectStreams: true });
-  const smallest = rasterized.byteLength < optimized.byteLength ? rasterized : optimized;
-  return new Blob([smallest], { type: 'application/pdf' });
+  const { compressPdfDetailed } = await import('./pdfCompression');
+  return (await compressPdfDetailed(file, options)).blob;
 }
 
 export async function findTextMatches(file, detectors, onProgress) {

@@ -1,0 +1,9 @@
+.pdf-page-thumbnail { position: relative; display: flex; align-items: center; justify-content: center; height: 234px; padding: 12px; overflow: hidden; }
+.pdf-page-thumbnail canvas { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: var(--shadow-sm); background: white; pointer-events: none; }
+.pdf-page-thumbnail canvas[hidden] { display: none; }
+.pdf-thumbnail-status { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); font-size: 10px; }
+.pdf-page-thumbnail.large { height: min(70vh, 850px); min-height: 260px; padding: 10px; }
+.pdf-thumbnail-spin { animation: pdf-thumbnail-spin 1s linear infinite; }
+@keyframes pdf-thumbnail-spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) { .pdf-page-thumbnail:not(.large) { height: 210px; } }
+@media (prefers-reduced-motion: reduce) { .pdf-thumbnail-spin { animation: none; } }

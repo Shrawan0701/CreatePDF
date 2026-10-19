@@ -1,0 +1,38 @@
+.pdf-zip-workspace { padding: 24px; }
+.pdf-zip-picker { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pdf-zip-picker:disabled { opacity: .6; }
+.pdf-zip-picker:disabled .drop-zone { pointer-events: none; }
+.pdf-zip-drop { min-height: 180px; display: flex; align-items: center; justify-content: center; gap: 18px; padding: 28px; }
+.pdf-zip-drop.compact { min-height: 104px; padding: 18px; }
+.pdf-zip-drop-icon { display: grid; place-items: center; flex-shrink: 0; width: 58px; height: 58px; color: var(--primary); background: var(--primary-light); border-radius: 16px; }
+.pdf-zip-drop .drop-zone-title { margin: 0; }
+.pdf-zip-drop .drop-zone-sub { margin-top: 5px; }
+.pdf-zip-files { margin-top: 20px; }
+.pdf-zip-list-header { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; font-size: 14px; }
+.pdf-zip-list-header > span { color: var(--text-muted); }
+.pdf-zip-list-header > button { margin-left: auto; }
+.pdf-zip-file-list { display: grid; gap: 8px; max-height: 420px; overflow: auto; scrollbar-gutter: stable; }
+.pdf-zip-file-list .file-item { margin: 0; }
+.pdf-zip-file-list .file-item-info { min-width: 0; }
+.pdf-zip-file-list .file-item-meta { overflow-wrap: anywhere; }
+.pdf-zip-actions { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-top: 24px; }
+.pdf-zip-actions .form-group { flex: 1; min-width: 180px; max-width: 400px; margin: 0; }
+.pdf-zip-actions > button { min-height: 44px; }
+.pdf-zip-name { display: flex; align-items: center; border: 1px solid var(--border); background: var(--bg-surface); border-radius: 8px; overflow: hidden; }
+.pdf-zip-name:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pdf-zip-name .form-input { border: 0; box-shadow: none; outline: 0; min-width: 0; }
+.pdf-zip-name > span { padding: 0 14px; color: var(--text-muted); font-size: 14px; }
+.pdf-zip-progress { display: flex; gap: 16px; align-items: center; margin-top: 18px; }
+.pdf-zip-progress > div { flex: 1; }
+.pdf-zip-error { color: var(--danger); background: var(--danger-light); border-radius: 8px; padding: 12px; margin: 16px 0 0; font-size: 14px; }
+.pdf-zip-result { display: flex; align-items: center; gap: 8px; color: var(--primary); margin: 16px 0 0; font-size: 14px; }
+.pdf-zip-note { color: var(--text-muted); font-size: 12px; margin: 16px 0 0; }
+@media (max-width: 560px) {
+  .pdf-zip-workspace { padding: 16px; }
+  .pdf-zip-drop { flex-direction: column; gap: 12px; padding: 20px 12px; }
+  .pdf-zip-drop.compact { flex-direction: row; text-align: left; }
+  .pdf-zip-drop .drop-zone-title { font-size: 17px; }
+  .pdf-zip-drop .drop-zone-sub { font-size: 13px; }
+  .pdf-zip-actions { flex-direction: column; align-items: stretch; }
+  .pdf-zip-actions .form-group { max-width: none; width: 100%; }
+}

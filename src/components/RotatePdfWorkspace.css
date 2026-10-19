@@ -1,0 +1,54 @@
+.rotate-workspace { min-width: 0; }
+.rotate-upload .drop-zone { min-height: 225px; }
+.rotate-file-bar { display: flex; align-items: center; gap: 10px; min-width: 0; margin-bottom: 14px; }
+.rotate-file-bar > svg { color: var(--primary); flex-shrink: 0; }
+.rotate-file-bar > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.rotate-file-bar > span { color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+.rotate-file-bar > .btn { flex-shrink: 0; margin-left: auto; }
+.rotate-file-bar > .icon-btn { flex-shrink: 0; }
+.rotate-toolbar { position: sticky; top: calc(var(--topbar-height, 60px) + 10px); z-index: 25; display: grid; gap: 12px; margin-bottom: 16px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); box-shadow: var(--shadow-sm); }
+.rotate-selection-row, .rotate-action-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.rotate-action-row { padding-top: 12px; border-top: 1px solid var(--border); }
+.rotate-presets { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-body); }
+.rotate-presets > button { padding: 6px 12px; border-radius: 4px; cursor: pointer; color: var(--text-secondary); font-size: 11px; }
+.rotate-presets > button[aria-pressed=true] { background: var(--primary); color: var(--text-on-primary); }
+.rotate-selection-count { font-size: 11px; color: var(--text-secondary); margin-left: 4px; }
+.rotate-clear { font-size: 10px; color: var(--primary); cursor: pointer; padding: 5px; }
+.rotate-history { display: flex; align-items: center; gap: 3px; margin-left: auto; }
+.rotate-history .btn { margin-left: 7px; font-size: 10px; }
+.rotate-range-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.rotate-range-row > label { font-size: 11px; color: var(--text-secondary); }
+.rotate-range-row > input { max-width: 240px; font-size: 12px; padding: 8px 10px; }
+.rotate-range-row > span { color: var(--danger); font-size: 11px; }
+.rotate-action-row > .btn { font-size: 12px; padding: 10px 13px; }
+.rotate-changes { font-size: 10px; color: var(--primary); margin-left: 3px; }
+.rotate-action-row > .rotate-download { margin-left: auto; }
+.rotate-workspace .icon-btn:disabled, .rotate-presets > button:disabled, .rotate-clear:disabled { opacity: .35; cursor: default; }
+.rotate-workspace button:focus-visible, .rotate-checkbox:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 3px; }
+.rotate-workspace .rotate-board { padding: 20px; }
+.rotate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 16px; align-items: start; }
+.rotate-page-card { min-width: 0; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: var(--bg-body); }
+.rotate-page-card.is-selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.rotate-card-header { display: flex; align-items: center; gap: 8px; height: 40px; padding: 8px 10px; background: var(--bg-surface); border-bottom: 1px solid var(--border); }
+.rotate-card-header > span { font-size: 11px; font-weight: 600; }
+.rotate-card-header > .rotate-angle { margin-left: auto; padding: 3px 5px; color: var(--primary); background: var(--primary-light); border-radius: 4px; font-size: 9px; }
+.rotate-checkbox { position: relative; display: grid; place-items: center; width: 18px; height: 18px; flex-shrink: 0; }
+.rotate-checkbox input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.rotate-checkbox > span { display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--bg-body); pointer-events: none; }
+.rotate-checkbox input:checked + span { background: var(--primary); border-color: var(--primary); color: var(--text-on-primary); }
+.rotate-checkbox:has(input:disabled) { opacity: .5; }
+.rotate-page-select { display: block; width: 100%; padding: 0; cursor: pointer; }
+.rotate-page-select:disabled { cursor: default; }
+.rotate-page-actions { display: flex; align-items: center; justify-content: space-evenly; gap: 5px; padding: 8px; border-top: 1px solid var(--border); background: var(--bg-surface); }
+.rotate-page-actions .icon-btn { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 5px; }
+.rotate-action-row .btn[aria-pressed=true], .rotate-page-actions .icon-btn[aria-pressed=true], .rotate-preview-controls .btn[aria-pressed=true] { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+.rotate-action-row .btn[aria-pressed=mixed] { border-style: dashed; border-color: var(--primary); }
+.rotate-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; min-height: 250px; color: var(--text-secondary); font-size: 13px; }
+.rotate-progress { margin: 12px 0; }
+.rotate-error { padding: 13px 16px; margin: 12px 0; color: var(--danger); background: var(--danger-light); border-radius: 7px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.rotate-preview-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; width: 100%; }
+.rotate-preview-controls > div { display: flex; gap: 6px; }
+.rotate-spin { animation: rotate-workspace-spin 1s linear infinite; }
+@keyframes rotate-workspace-spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) { .rotate-file-bar { flex-wrap: wrap; gap: 7px; } .rotate-file-bar > strong { max-width: calc(100% - 90px); } .rotate-file-bar > .btn { margin-left: 0; } .rotate-toolbar { padding: 10px; gap: 9px; } .rotate-presets > button { padding: 6px 9px; } .rotate-history { flex-basis: 100%; justify-content: flex-end; } .rotate-action-row > .btn { flex: 1; padding: 9px 7px; font-size: 11px; gap: 5px; } .rotate-action-row > .rotate-download { flex: 1 0 100%; order: 2; } .rotate-changes { flex-basis: 100%; text-align: center; } .rotate-workspace .rotate-board { padding: 12px; } .rotate-grid { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 12px; } .rotate-preview-controls .btn { font-size: 10px; padding: 7px; } }
+@media (prefers-reduced-motion: reduce) { .rotate-spin { animation: none; } }

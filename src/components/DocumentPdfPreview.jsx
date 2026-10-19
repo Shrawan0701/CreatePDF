@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { getPdfjsLib } from '../services/pdfEngine'
 
-export function DocumentPdfPreview({ blob, updating, error, empty, emptyLabel = 'Add HTML to preview', heading = 'PDF preview', readyLabel = 'Matches your download' }) {
+export function DocumentPdfPreview({ blob, updating, error, empty, initialPage = 1, emptyLabel = 'Add HTML to preview', heading = 'PDF preview', readyLabel = 'Matches your download' }) {
   const viewportRef = useRef(null)
   const canvasRef = useRef(null)
   const [documentState, setDocumentState] = useState(null)
@@ -40,6 +40,10 @@ export function DocumentPdfPreview({ blob, updating, error, empty, emptyLabel = 
     load().catch(error => { if (!cancelled) setFailure({ blob, message: error.message }) })
     return () => { cancelled = true; task?.destroy().catch(() => {}) }
   }, [blob])
+
+  useEffect(() => {
+    if (pdf) setPageNumber(Math.min(pdf.numPages, Math.max(1, Number.isInteger(initialPage) ? initialPage : 1)))
+  }, [pdf, initialPage])
 
   useEffect(() => {
     if (!pdf) return

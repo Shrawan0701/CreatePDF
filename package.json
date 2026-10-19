@@ -21,6 +21,7 @@
     "smoke:pdf-word": "node scripts/pdf-word-smoke.mjs",
     "smoke:pdf-html": "node scripts/pdf-html-smoke.mjs",
     "smoke:pdf-epub": "node scripts/pdf-epub-smoke.mjs",
+    "smoke:alternate-mix": "node scripts/alternate-mix-smoke.mjs",
     "smoke:metadata": "node scripts/metadata-smoke.mjs",
     "smoke:powerpoint": "node scripts/powerpoint-smoke.mjs",
     "smoke:html-preview": "node scripts/html-preview-smoke.mjs",

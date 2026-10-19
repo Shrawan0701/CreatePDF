@@ -8,7 +8,7 @@ import {
   Presentation, Globe, FilePlus, AlignJustify, User, Table, BookMarked,
   Image, FileType, Tags, Lock, Unlock, Eye, Zap,
   Share2, Pencil, Receipt, BarChart3, Blend, SplitSquareHorizontal,
-  ChevronDown, Languages, MessageSquare, NotebookPen, Contact
+  HardDrive, Languages, MessageSquare, NotebookPen, Contact
 } from 'lucide-react';
 
 export const TOOL_CATEGORIES = {
@@ -76,7 +76,7 @@ export const TOOLS = [
     name: 'Compress PDF',
     category: TOOL_CATEGORIES.PAGE_MANAGEMENT,
     catKey: 'page',
-    description: 'Reduce PDF file size while maintaining quality',
+    description: 'Reduce PDF size while keeping text, links, and original pages',
     icon: Minimize2,
     route: '/compress-pdf',
     keywords: ['compress', 'reduce', 'optimize', 'size', 'smaller'],
@@ -131,8 +131,8 @@ export const TOOLS = [
     name: 'Split PDF by Size',
     category: TOOL_CATEGORIES.PAGE_MANAGEMENT,
     catKey: 'page',
-    description: 'Divide into files respecting a maximum file-size target',
-    icon: ChevronDown,
+    description: 'Split into whole-page PDFs with measured file sizes and previews',
+    icon: HardDrive,
     route: '/split-by-size',
     keywords: ['split', 'size', 'file size', 'limit'],
     accepts: ['application/pdf'],
@@ -197,10 +197,10 @@ export const TOOLS = [
     name: 'PDF to ZIP',
     category: TOOL_CATEGORIES.PAGE_MANAGEMENT,
     catKey: 'page',
-    description: 'Export PDF pages as images packaged in a ZIP archive',
+    description: 'Package multiple original PDF files into one ZIP archive',
     icon: Archive,
     route: '/pdf-to-zip',
-    keywords: ['zip', 'archive', 'pages', 'images'],
+    keywords: ['zip', 'archive', 'multiple pdfs', 'package', 'bundle'],
     accepts: ['application/pdf'],
   },
 

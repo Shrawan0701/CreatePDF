@@ -3,6 +3,7 @@ import { FileText, Trash2, Download } from 'lucide-react';
 import { ToolPage, useToolState } from '../../components/ToolPage';
 import { DropZone, FileItem, ProgressBar, FormGroup, downloadBlob } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
+import { RotatePdfWorkspace } from '../../components/RotatePdfWorkspace';
 import { addWatermarkToPdf, addPageNumbers, flattenPdf, getPdfLib, loadPdfBytes, parsePageRanges } from '../../services/pdfEngine';
 
 // ===== ADD WATERMARK =====
@@ -125,72 +126,7 @@ export function PageNumbers() {
 }
 
 // ===== ROTATE PDF =====
-export function RotatePdf() {
-  const { files, addFiles, reset, processing, progress, error, run } = useToolState();
-  const { showToast } = useApp();
-  const [rotationDeg, setRotationDeg] = useState(90);
-  const [pagesMode, setPagesMode] = useState('all'); // 'all'|'odd'|'even'|'range'
-  const [pageRange, setPageRange] = useState('');
-
-  const handleRotate = async () => {
-    if (!files[0]) return;
-    await run(async (setProgress) => {
-      const { PDFDocument, degrees } = await getPdfLib();
-      const bytes = await loadPdfBytes(files[0]);
-      const pdfDoc = await PDFDocument.load(bytes);
-      const pages = pdfDoc.getPages();
-      const selectedPages = pagesMode === 'range' ? new Set(parsePageRanges(pageRange, pages.length)) : null;
-      setProgress(30);
-      pages.forEach((page, i) => {
-        const num = i + 1;
-        const shouldRotate =
-          pagesMode === 'all' ||
-          (pagesMode === 'odd' && num % 2 !== 0) ||
-          (pagesMode === 'even' && num % 2 === 0) ||
-          (pagesMode === 'range' && selectedPages.has(num));
-        if (shouldRotate) page.setRotation(degrees((page.getRotation().angle + rotationDeg) % 360));
-      });
-      setProgress(80);
-      const out = await pdfDoc.save();
-      downloadBlob(new Blob([out], { type: 'application/pdf' }), `rotated-${files[0].name}`);
-      showToast(`Pages rotated ${rotationDeg}°!`, 'success');
-    });
-  };
-
-  return (
-    <ToolPage toolId="rotate-pdf">
-      <div className="tool-panel">
-        <DropZone onFiles={(f) => addFiles(f.filter((x) => x.type === 'application/pdf').slice(0, 1))} accept={['application/pdf']}>
-          <div className="drop-zone-icon"><FileText size={28} /></div>
-          <div className="drop-zone-title">Drop a PDF to rotate</div>
-          <div className="drop-zone-sub">or click to browse</div>
-        </DropZone>
-        {files[0] && <div style={{ marginTop: 10 }}><FileItem file={files[0]} onRemove={() => reset()} /></div>}
-      </div>
-      <div className="tool-panel">
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <FormGroup label="Rotation">
-            {[90, 180, 270, -90].map((d) => (
-              <button key={d} className={`btn btn-sm ${rotationDeg === d ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setRotationDeg(d)} style={{ marginRight: 6 }}>{d > 0 ? '+' : ''}{d}°</button>
-            ))}
-          </FormGroup>
-          <FormGroup label="Apply to">
-            {['all', 'odd', 'even', 'range'].map((m) => (
-              <button key={m} className={`btn btn-sm ${pagesMode === m ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPagesMode(m)} style={{ marginRight: 6, textTransform: 'capitalize' }}>{m}</button>
-            ))}
-          </FormGroup>
-          {pagesMode === 'range' && <FormGroup label="Page range"><input className="form-input" value={pageRange} onChange={(event) => setPageRange(event.target.value)} placeholder="1-3, 7, 10-12" /></FormGroup>}
-        </div>
-      </div>
-      {error && <div style={{ color: 'var(--danger)', padding: 10, background: 'var(--danger-light)', borderRadius: 8, marginBottom: 12 }}>{error}</div>}
-      {processing && <ProgressBar value={progress} label="Rotating…" />}
-      <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-        <button className="btn btn-primary btn-lg" onClick={handleRotate} disabled={!files[0] || processing}><Download size={18} /> Rotate PDF</button>
-        {files[0] && <button className="btn btn-secondary" onClick={reset}><Trash2 size={16} /> Reset</button>}
-      </div>
-    </ToolPage>
-  );
-}
+export const RotatePdf = RotatePdfWorkspace;
 
 // ===== FLATTEN PDF =====
 export function FlattenPdf() {
