@@ -1,5 +1,6 @@
 import { blankBoard, normalizeBoard, normalizeBoardAction } from '../../shared/whiteboard.js'
 import { getPdfLib } from './pdfEngine'
+import { createRoomSession } from './whiteboardTransport'
 
 export async function readSavedWhiteboard(record) {
   let width = record.width
@@ -42,37 +43,7 @@ export function paintWhiteboard(context, board, draft = null) {
 }
 
 export function createWhiteboardSession({ onMessage, onDisconnect, onError }) {
-  const configured = import.meta.env.VITE_WHITEBOARD_URL || import.meta.env.VITE_SIGNALING_URL
-  let endpoint = configured || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/whiteboard-signal`
-  if (configured && /\/signal\/?$/.test(endpoint)) endpoint = endpoint.replace(/\/signal\/?$/, '/whiteboard-signal')
-  let socket, closed = false, ready = false, timer
-  const close = () => { closed = true; clearTimeout(timer); socket?.close() }
-  const send = payload => {
-    if (socket?.readyState !== WebSocket.OPEN) throw new Error('The room connection is closed. Rejoin or continue locally.')
-    socket.send(JSON.stringify(payload))
-  }
-  return {
-    open(request) {
-      try {
-        socket = new WebSocket(endpoint)
-        timer = setTimeout(() => { if (!ready && !closed) { onError('Room service did not respond. Restart the local dev server or check the room relay.'); close() } }, 10000)
-        socket.onopen = () => { if (closed) return; try { send(request) } catch (error) { onError(error.message); close() } }
-        socket.onmessage = event => {
-          if (closed) return
-          try {
-            const message = JSON.parse(event.data)
-            if (message.type === 'ready') { ready = true; clearTimeout(timer) }
-            if (message.type === 'error' && !ready) { onError(message.message); close(); return }
-            onMessage(message)
-          } catch (error) { onError(error.message || 'Room data could not be read.'); close() }
-        }
-        socket.onerror = () => { if (!closed) { clearTimeout(timer); onError('Room service is unavailable. Your board is kept on this device.'); close() } }
-        socket.onclose = () => { clearTimeout(timer); if (!closed) { closed = true; onDisconnect(ready) } }
-      } catch (error) { onError(error.message || 'This browser could not open a room.'); close() }
-    },
-    send,
-    close,
-  }
+  return createRoomSession({ onMessage, onDisconnect, onError, configured: import.meta.env.VITE_WHITEBOARD_URL || import.meta.env.VITE_SIGNALING_URL, development: import.meta.env.DEV })
 }
 
 export async function exportWhiteboard(board, format, title) {

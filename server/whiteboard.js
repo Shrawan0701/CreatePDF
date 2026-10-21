@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws'
 import { assertBoardSize, applyBoardOperation, normalizeBoard, normalizeBoardOperation, roomCode, MAX_BOARD_BYTES } from '../shared/whiteboard.js'
 
 // Live room state is kept in memory. Personal saved boards remain in IndexedDB.
-export function attachWhiteboardRelay(server) {
+export function attachWhiteboardRelay(server, { paths = ['/whiteboard-signal', '/api/whiteboard-signal'] } = {}) {
   const rooms = new Map(), sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_BOARD_BYTES + 65536, perMessageDeflate: false })
   const send = (socket, message) => {
     if (socket.readyState !== 1) return
@@ -62,7 +62,7 @@ export function attachWhiteboardRelay(server) {
   }, 30000)
   interval.unref?.()
   const upgrade = (request, socket, head) => {
-    if (request.url?.split('?')[0] !== '/whiteboard-signal') return
+    if (paths && !paths.includes(request.url?.split('?')[0])) return
     sockets.handleUpgrade(request, socket, head, peer => sockets.emit('connection', peer, request))
   }
   server.on('upgrade', upgrade)

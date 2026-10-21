@@ -9,7 +9,10 @@ config.redirects = [
   { source: '/index.html', destination: '/', permanent: true },
   { source: '/:tool/index.html', destination: '/:tool', permanent: true },
 ];
-config.rewrites = [...TOOLS.map((tool) => tool.route), '/settings'].map((path) => ({ source: path, destination: `${path}/index.html` }));
+config.rewrites = [
+  { source: '/whiteboard-signal', destination: '/api/whiteboard-signal' },
+  ...[...TOOLS.map((tool) => tool.route), '/settings'].map((path) => ({ source: path, destination: `${path}/index.html` })),
+];
 config.headers = [
   { source: '/api/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] },
   { source: '/settings', headers: [{ key: 'X-Robots-Tag', value: 'noindex, follow' }] },

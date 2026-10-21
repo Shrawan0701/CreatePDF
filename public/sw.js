@@ -14,7 +14,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
-  if (request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname === '/health' || url.pathname === '/signal') return
+  if (request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname === '/health' || url.pathname === '/signal' || url.pathname === '/whiteboard-signal') return
 
   if (url.pathname === '/manifest.json') {
     event.respondWith(fetch(request, { cache: 'no-cache' }).catch(async () => {

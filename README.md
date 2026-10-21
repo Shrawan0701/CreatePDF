@@ -35,7 +35,7 @@ Word conversion uses `POST /api/word-to-pdf` and an Office layout engine instead
 2. Run or restart `npm run dev`. Vite serves `/api/translate`, `/api/chat`, `/api/summarize` and `/api/invoice` on the same origin; no separate development server is needed.
 3. On Vercel, import this repository, choose Vite, and add `OPENAI_API_KEY` to the appropriate project environment (Production and/or Preview). Deploy or redeploy after changing the secret. `vercel.json` preserves API functions and SPA routes.
 
-No database, account system, or authentication is added. API functions use a fixed model and action-specific input validation, payload limits and timeouts. A public deployment makes AI actions publicly callable and charges your OpenAI account; configure provider spending limits for your deployment. Vercel does not host the optional WebSocket relay; existing P2P/whiteboard sharing still needs its relay for cross-device collaboration.
+AI API functions use a fixed model and action-specific input validation, payload limits and timeouts. A public deployment makes AI actions publicly callable and charges your OpenAI account; configure provider spending limits for your deployment. Whiteboard uses the included `/api/whiteboard-signal` WebSocket function on Vercel. P2P file sharing uses its separate WebSocket relay.
 
 ### New document tools
 
@@ -114,9 +114,21 @@ After deploying, verify the domain in [Google Search Console](https://search.goo
 
 ## Collaboration
 
-Whiteboard has explicit Create room and Join room actions. It uses the dedicated `/whiteboard-signal` WebSocket endpoint, installed by both the Vite dev server and the Node production server; restart the dev server after updating its configuration. A room can have up to 12 participants. The relay orders drawing operations and synchronizes the full board when someone joins. Undo/redo targets action IDs instead of replacing other participants' history. Live drawing data passes through this relay; personal saved boards stay in browser storage. Empty rooms expire after 15 minutes, and restarting the server clears live rooms. Autosave, reopening saved boards and PDF/PNG downloads provide local copies.
+Whiteboard has explicit Create room and Join room actions. Local development uses `/whiteboard-signal`, installed by the Vite dev server. The Node production server also provides this WebSocket relay. A room can have up to 12 participants. Drawing operations are ordered and the full board is synchronized on joining. Undo/redo targets action IDs instead of replacing other participants' history. Personal saved boards stay in browser storage; live shared drawing data passes through the room service. Autosave, reopening saved boards and PDF/PNG downloads provide local copies.
 
-Static hosting, including Vercel, needs a separately hosted Node relay. Set the public `VITE_WHITEBOARD_URL=wss://example.com/whiteboard-signal` endpoint before building. The older `VITE_SIGNALING_URL` setting is also accepted, with a trailing `/signal` mapped to `/whiteboard-signal`; update the remote server to support the new endpoint. A room link opens the same website on the receiving device, so use a reachable site address when sharing across devices. The existing P2P file-sharing implementation retains its separate `/signal` endpoint and WebRTC transport; some networks require a TURN relay, which is not bundled.
+#### Whiteboard rooms on Vercel
+
+The Vite WebSocket server is not part of the static build. The included `api/whiteboard-signal.js` exports an HTTP server with the same room relay attached, as required by [Vercel's native WebSocket support](https://vercel.com/docs/functions/websockets). Production clients use `/api/whiteboard-signal` automatically; `/whiteboard-signal` is also rewritten there for older clients. `vercel.json` enables Fluid Compute in code. Push and redeploy the code. No Redis account, API key, separately hosted relay, or dashboard configuration is required for this setup.
+
+Visit `/api/whiteboard-signal` on the deployed site to check that the function is present. It returns `{"ok":true,"service":"whiteboard","transport":"websocket","storage":"memory"}` for ordinary HTTP requests. Then create a room and open its invitation link in a separate browser/device. This HTTP health response confirms the route exists; the create/join interaction verifies WebSocket upgrades.
+
+This configuration keeps rooms in server memory. A room can be joined only by connections reaching the same function instance. Vercel can route new connections to different instances, so this setup does not guarantee room lookup across scaling or deployments. WebSocket connections also close at the function duration limit (configured as 300 seconds); use Rejoin room if the room still exists. Empty rooms expire after 15 minutes. Restarting an instance loses its rooms. Save or export a local copy to retain a board. Reliable multi-instance rooms require shared storage or a single persistent Node server; memory cannot provide that guarantee.
+
+#### Using an existing WebSocket relay
+
+Optional build-time `VITE_WHITEBOARD_URL=wss://example.com/whiteboard-signal` and older `VITE_SIGNALING_URL` overrides remain supported if a relay is already hosted elsewhere; they are not needed for the included function. HTTPS URLs are converted to WSS and a trailing `/signal` is mapped to `/whiteboard-signal`. An old override pointing to a missing relay takes priority over the default API route and should be removed. Plain `npm start` also serves `/api/whiteboard-signal` from the same Node server, with all rooms on that process. Node rooms expire 15 minutes after their last participant leaves and reset when that server restarts.
+
+A room link opens the same website on the receiving device, so use a reachable site address when sharing across devices. P2P file sharing retains its separate `/signal` endpoint and WebRTC transport; some networks require a TURN relay, which is not bundled.
 
 ## Privacy
 

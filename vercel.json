@@ -1,7 +1,11 @@
 {
+  "fluid": true,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
+    "api/whiteboard-signal.js": {
+      "maxDuration": 300
+    },
     "api/html-to-pdf.js": {
       "maxDuration": 120,
       "includeFiles": "node_modules/@sparticuz/chromium/bin/**"
@@ -33,6 +37,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/whiteboard-signal",
+      "destination": "/api/whiteboard-signal"
+    },
     {
       "source": "/scan-document",
       "destination": "/scan-document/index.html"
