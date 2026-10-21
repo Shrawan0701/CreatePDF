@@ -10,7 +10,7 @@ export function ToolGuide({ tool, LinkComponent = 'a' }) {
     : tool.id === 'html-to-pdf' ? 'HTML and CSS are sent to this app’s server for rendering, including previews. Referenced public HTTPS styles, fonts and images may be loaded. Uploaded scripts are disabled.'
     : ['word-to-pdf', 'powerpoint-to-pdf'].includes(tool.id) ? 'Your document is sent to this app’s server for layout-preserving conversion. The temporary document copy is deleted after conversion.'
     : tool.id === 'invoice-extractor' ? 'Text extraction and OCR run locally by default. If you choose optional AI extraction, the extracted bill text is sent to AI.'
-    : tool.catKey === 'collab' ? 'Sharing and collaboration connect participants through the available room and peer connection. Only share documents and boards with the intended recipients.'
+    : tool.catKey === 'collab' ? 'Sharing and collaboration connect participants through the available rooms and peer connection. Only share documents and boards with the intended recipients.'
     : 'This tool processes your document in your browser. There is no document upload to the application server for this operation. Download the result to keep your own copy.';
   const related = [...TOOLS.filter((item) => item.id !== tool.id && item.category === tool.category), ...FEATURED_SEO_TOOLS.map((id) => TOOLS.find((item) => item.id === id))].filter((item, index, items) => item.id !== tool.id && items.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 4);
   return h('section', { className: 'tool-guide', 'aria-label': `${tool.name} guide` },
