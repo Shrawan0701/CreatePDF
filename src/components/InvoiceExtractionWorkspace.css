@@ -1,0 +1,50 @@
+.invoice-extraction .tool-panel + .tool-panel { margin-top: 18px; }
+.iex-extract-actions, .iex-actions, .iex-review-heading, .iex-items-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.iex-extract-actions { margin-top: 18px; }
+.iex-review-heading { justify-content: space-between; margin-bottom: 20px; }
+.iex-review-heading h2 { margin: 0; font-size: 21px; }
+.iex-review-heading p { margin: 6px 0 0; font-size: 12px; color: var(--text-secondary); }
+.iex-actions { gap: 10px; }
+.iex-actions .btn { font-size: 13px; }
+.iex-analysis { border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 9px; padding: 17px 20px; margin-bottom: 24px; background: var(--bg-surface-2); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.iex-analysis.needs-review { border-left-color: var(--warning); }
+.iex-analysis > strong { font-size: 14px; }
+.iex-analysis p { margin: 6px 0 0; }
+.iex-analysis ul { padding-left: 20px; margin-top: 8px; }
+.iex-analysis details { margin-top: 10px; }
+.iex-analysis summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }
+.iex-main-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.iex-two-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.invoice-extraction .form-group { min-width: 0; margin: 0; }
+.invoice-extraction .form-label { font-size: 12px; margin-bottom: 7px; }
+.invoice-extraction .form-input, .invoice-extraction .form-select { font-size: 13px; min-height: 40px; }
+.iex-details { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.iex-details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+.iex-details summary > span { color: var(--text-muted); margin-left: 8px; font-size: 11px; }
+.iex-details[open] > :not(summary) { margin-top: 16px; }
+.iex-items-heading { justify-content: space-between; margin-top: 28px; }
+.iex-items-heading h3, .iex-totals h3 { margin: 0; font-size: 16px; }
+.iex-items-heading span, .iex-totals h3 span { color: var(--text-secondary); font-size: 12px; }
+.iex-table-scroll { margin: 14px 0; overflow-x: auto; }
+.iex-table { border-collapse: collapse; width: 100%; min-width: 650px; }
+.iex-table th { text-align: left; font-weight: 500; color: var(--text-secondary); font-size: 12px; padding: 10px 7px; border-bottom: 1px solid var(--border); }
+.iex-table td { vertical-align: top; padding: 12px 7px; border-bottom: 1px solid var(--border); }
+.iex-table td:first-child { width: 43%; min-width: 260px; }
+.iex-table td:last-child { width: 34px; }
+.iex-table td:not(:first-child):not(:last-child) { min-width: 100px; }
+.iex-table .form-input { width: 100%; min-width: 0; }
+.iex-item-options { margin-top: 8px; }
+.iex-item-options summary { font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+.iex-item-options[open] > :not(summary) { margin-top: 13px; }
+.iex-item-options .form-label { font-size: 11px; }
+.iex-item-options .form-input, .iex-item-options .form-select { font-size: 12px; }
+.iex-totals { padding: 20px; background: var(--bg-surface-2); border: 1px solid var(--border); border-radius: 10px; margin-top: 26px; }
+.iex-totals h3 { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 18px; }
+.iex-totals-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.iex-total-display { margin: 20px 0 0; padding-top: 17px; border-top: 1px solid var(--border); display: flex; gap: 16px; justify-content: space-between; color: var(--text-secondary); font-size: 13px; }
+.iex-total-display strong { color: var(--primary); font-size: 23px; overflow-wrap: anywhere; text-align: right; }
+.iex-empty { margin: 16px 0; color: var(--text-secondary); font-size: 13px; }
+.iex-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.invoice-extraction .document-raw pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 1050px) { .iex-main-fields, .iex-totals-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .iex-review-heading h2 { font-size: 18px; } .iex-actions { width: 100%; } .iex-actions .btn { flex: 1; padding-inline: 10px; } .iex-main-fields, .iex-two-fields { grid-template-columns: minmax(0, 1fr); } .iex-item-options .iex-two-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .iex-totals { padding: 15px; } .iex-totals-fields { gap: 14px 10px; } .iex-total-display { flex-wrap: wrap; } .iex-analysis { padding: 14px; } }

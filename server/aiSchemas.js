@@ -11,6 +11,10 @@ export const AI_SCHEMAS = {
   evidence: object({ matches: array(object({ id: string, quote: string, relevance: integer })) }),
   chat: object({ answer: string, language: { type: 'string', enum: LANGUAGE_NAMES }, supported: { type: 'boolean' }, sources: array(object({ page: integer, quote: string })) }),
   invoice: object({ supplierName: stringOrNull, supplierAddress: stringOrNull, invoiceNumber: stringOrNull, invoiceDate: stringOrNull, gstin: stringOrNull, currency: stringOrNull,
-    items: array(object({ description: string, quantity: numberOrNull, price: numberOrNull, discount: numberOrNull, amount: numberOrNull })),
-    discount: numberOrNull, cgst: numberOrNull, sgst: numberOrNull, igst: numberOrNull, subtotal: numberOrNull, grandTotal: numberOrNull }),
+    items: array(object({ description: string, quantity: numberOrNull, price: numberOrNull, discount: numberOrNull, discountType: { type: 'string', enum: ['amount', 'percent'] }, amount: numberOrNull,
+      amountBasis: { type: 'string', enum: ['gross', 'net', 'total', 'unknown'] }, taxRate: numberOrNull, taxAmount: numberOrNull })),
+    discount: numberOrNull, discountPercent: numberOrNull, discountScope: { type: 'string', enum: ['invoice', 'all', 'unknown'] },
+    discountIncludedInSubtotal: { type: ['boolean', 'null'] }, subtotalBasis: { type: 'string', enum: ['gross', 'net', 'unknown'] },
+    tax: numberOrNull, taxLabel: stringOrNull, taxTreatment: { type: 'string', enum: ['exclusive', 'inclusive', 'unknown'] },
+    cgst: numberOrNull, sgst: numberOrNull, igst: numberOrNull, charges: numberOrNull, rounding: numberOrNull, subtotal: numberOrNull, grandTotal: numberOrNull }),
 };

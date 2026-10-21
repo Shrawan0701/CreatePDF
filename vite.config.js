@@ -3,11 +3,14 @@ import react from '@vitejs/plugin-react'
 import { createHandler } from './server/ai.js'
 import { createWordPdfHandler, createPowerpointPdfHandler } from './server/wordPdf.js'
 import { createHtmlPdfHandler } from './server/htmlPdf.js'
+import { attachWhiteboardRelay } from './server/whiteboard.js'
 
 export default defineConfig({
+  assetsInclude: ['**/*.wasm'],
   plugins: [react(), {
     name: 'createpdf-local-api',
     configureServer(server) {
+      if (server.httpServer) attachWhiteboardRelay(server.httpServer)
       const env = loadEnv(server.config.mode, server.config.root, '')
       const wordPdf = createWordPdfHandler({ env: { ...env, ...process.env } })
       const powerpointPdf = createPowerpointPdfHandler({ env: { ...env, ...process.env } })
@@ -31,7 +34,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom'],
-    exclude: ['pdfjs-dist']
+    exclude: ['pdfjs-dist', '@lipoe/browser-qpdf']
   },
   build: {
     rollupOptions: {},

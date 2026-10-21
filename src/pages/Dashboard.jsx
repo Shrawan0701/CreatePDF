@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowDown, ArrowUpRight, Check, FileText, Search, ShieldCheck, Star, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { TOOLS, TOOL_CATEGORIES, searchTools } from '../data/tools';
+import { VISIBLE_TOOLS as TOOLS, TOOL_CATEGORIES, searchTools } from '../data/tools';
 import { RecentFilesPanel } from '../components/Layout';
 import SavedDocumentsPanel from '../components/SavedDocumentsPanel';
 import { HomeGuide } from '../seo/GuideContent';

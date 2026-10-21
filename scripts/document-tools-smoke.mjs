@@ -25,7 +25,7 @@ try {
   const download = async (name) => { const pending = page.waitForEvent('download'); await page.getByRole('button', { name, exact: true }).click(); const file = await pending; const path = join(directory, file.suggestedFilename()); await file.saveAs(path); return readFile(path); };
   const open = async (route, title) => { await page.goto(`${origin}/${route}`); await page.getByRole('heading', { name: title, exact: true }).waitFor(); };
   await page.goto(origin);
-  assert.equal(await page.locator('.directory-item').count(), 64);
+  assert.equal(await page.locator('.directory-item').count(), 65);
   const missingKey = await context.request.post(`${origin}/api/summarize`, { data: { text: 'Document', length: 'short', format: 'executive', stage: 'final' } });
   assert.equal(missingKey.status(), 503);
   console.log('Missing-key API response checked.');

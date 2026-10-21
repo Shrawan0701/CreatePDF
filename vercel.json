@@ -54,6 +54,10 @@
       "destination": "/compress-pdf/index.html"
     },
     {
+      "source": "/repair-pdf",
+      "destination": "/repair-pdf/index.html"
+    },
+    {
       "source": "/split-pdf",
       "destination": "/split-pdf/index.html"
     },

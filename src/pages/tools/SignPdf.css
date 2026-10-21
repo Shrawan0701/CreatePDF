@@ -1,0 +1,100 @@
+.sign-workspace { min-width: 0; }
+.sign-upload .drop-zone { min-height: 190px; padding: 28px; }
+.sign-upload .drop-zone > svg { color: var(--primary); margin-bottom: 12px; }
+.sign-document-bar { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px 15px; border: 1px solid var(--border); border-radius: 11px; background: var(--bg-surface); margin-bottom: 14px; }
+.sign-file { min-width: 0; }
+.sign-file strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.sign-file > span { font-size: 11px; color: var(--text-muted); }
+.sign-document-actions { display: flex; align-items: center; flex-shrink: 0; gap: 7px; }
+.sign-icon { display: inline-flex; justify-content: center; align-items: center; flex-shrink: 0; width: 31px; height: 31px; border-radius: 6px; color: var(--text-secondary); background: transparent; cursor: pointer; }
+.sign-icon:hover:not(:disabled) { color: var(--primary); background: var(--primary-light); }
+.sign-workspace button:disabled { opacity: .4; cursor: default; }
+.sign-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); align-items: start; gap: 18px; }
+.sign-builder.tool-panel { padding: 18px; margin: 0; min-width: 0; }
+.sign-builder h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.sign-modes { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface-2); margin-bottom: 14px; }
+.sign-modes > button { flex: 1; padding: 7px 5px; border-radius: 5px; color: var(--text-secondary); background: transparent; cursor: pointer; font-size: 12px; }
+.sign-modes > button[aria-pressed="true"] { color: var(--primary); background: var(--bg-surface); box-shadow: var(--shadow-sm); font-weight: 600; }
+.sign-ink-pad { width: 100%; height: auto; aspect-ratio: 2; display: block; border: 1px solid var(--border-strong); border-radius: 8px; background: white; cursor: crosshair; touch-action: none; }
+.sign-ink-pad:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.sign-draw-actions { display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-top: 8px; }
+.sign-draw-actions .btn { font-size: 10px; padding: 5px 7px; }
+.sign-type { display: grid; gap: 10px; }
+.sign-fonts { display: flex; gap: 5px; }
+.sign-fonts > button { flex: 1; min-width: 0; padding: 7px 3px; font-size: 11px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); background: var(--bg-surface); cursor: pointer; }
+.sign-fonts > button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.sign-draft-preview { display: grid; align-items: center; justify-items: center; height: 110px; padding: 12px; background: white; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.sign-draft-preview img { max-width: 100%; max-height: 84px; object-fit: contain; }
+.sign-image-input .drop-zone { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 9px; padding: 20px 10px; min-height: 115px; color: var(--text-secondary); font-size: 12px; }
+.sign-image-input > .btn { margin-top: 8px; }
+.sign-check { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--text-secondary); font-size: 11px; }
+.sign-check input { accent-color: var(--primary); }
+.sign-ink-controls { display: flex; align-items: center; gap: 7px; border: 0; padding: 0; margin: 14px 0; min-width: 0; }
+.sign-ink-controls > span { color: var(--text-muted); font-size: 11px; }
+.sign-ink-controls > button { width: 21px; height: 21px; flex-shrink: 0; background: var(--ink); border: 3px solid var(--bg-surface); border-radius: 50%; cursor: pointer; }
+.sign-ink-controls > button[aria-pressed="true"] { outline: 1.5px solid var(--primary); outline-offset: 1px; }
+.sign-ink-controls > input[type="color"] { width: 23px; height: 24px; padding: 1px; border: 1px solid var(--border); border-radius: 4px; background: transparent; cursor: pointer; }
+.sign-ink-controls > input[type="range"] { width: 56px; min-width: 20px; flex: 1; accent-color: var(--primary); }
+.sign-add { width: 100%; margin-top: 12px; min-height: 40px; }
+.sign-replace { display: block; margin: 9px auto 0; background: transparent; color: var(--primary); font-size: 11px; cursor: pointer; }
+.sign-library { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 15px; }
+.sign-library h3 { font-size: 12px; margin: 0 0 8px; }
+.sign-library > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; max-height: 170px; overflow-y: auto; }
+.sign-library button { padding: 7px; height: 55px; border: 1px solid var(--border); border-radius: 6px; background: white; cursor: pointer; }
+.sign-library button:hover:not(:disabled) { border-color: var(--primary); }
+.sign-library img { max-width: 100%; max-height: 39px; object-fit: contain; }
+.sign-date { display: flex; gap: 6px; align-items: center; border-top: 1px solid var(--border); padding-top: 13px; margin-top: 15px; }
+.sign-date > input { width: 0; min-width: 0; flex: 1; color: var(--text-primary); background: var(--bg-input); padding: 7px 4px; border: 1px solid var(--border); border-radius: 5px; font-size: 11px; }
+.sign-date > button { flex-shrink: 0; font-size: 11px; padding: 7px; }
+.sign-repeat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; border-top: 1px solid var(--border); padding-top: 13px; margin-top: 13px; }
+.sign-repeat .form-input { padding: 7px; font-size: 11px; min-width: 0; }
+.sign-repeat .btn { padding: 7px; font-size: 10px; }
+.sign-review { min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); overflow: hidden; }
+.sign-page-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--border); }
+.sign-page-nav, .sign-object-tools, .sign-zoom { display: flex; align-items: center; gap: 1px; }
+.sign-page-nav label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.sign-page-nav input { width: 33px; padding: 4px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); background: var(--bg-surface); font-size: 11px; text-align: center; }
+.sign-object-tools { margin-left: auto; padding-left: 7px; border-left: 1px solid var(--border); }
+.sign-zoom { margin-left: auto; }
+.sign-zoom > button:not(.sign-icon) { min-width: 39px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.sign-canvas-area { height: min(73vh, 870px); min-height: 350px; position: relative; background: var(--bg-surface-2); }
+.sign-page-scroll { height: 100%; width: 100%; padding: 22px; overflow: auto; scrollbar-gutter: stable; }
+.sign-sheet { position: relative; margin: 0 auto; background: white; box-shadow: 0 3px 16px #0002; touch-action: none; user-select: none; }
+.sign-sheet > canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.sign-mark { position: absolute; outline: 1px dashed transparent; cursor: move; touch-action: none; }
+.sign-mark:hover { outline-color: var(--primary); }
+.sign-mark.selected { outline: 2px solid var(--primary); box-shadow: 0 0 0 3px #ffffff90; }
+.sign-mark > img { width: 100%; height: 100%; display: block; pointer-events: none; }
+.sign-resize { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; padding: 0; border: 2px solid white; border-radius: 3px; background: var(--primary); cursor: nwse-resize; }
+.sign-render-status { display: flex; justify-content: center; align-items: center; gap: 9px; flex-direction: row; position: absolute; inset: 0; padding: 20px; background: #eff4f1bc; color: #284c42; font-size: 12px; z-index: 3; }
+.sign-page-strip { display: flex; gap: 8px; overflow-x: auto; padding: 10px 12px; border-top: 1px solid var(--border); }
+.sign-page-strip > button { width: 62px; flex-shrink: 0; padding: 3px; border: 2px solid transparent; border-radius: 6px; background: var(--bg-surface-2); color: var(--text-secondary); cursor: pointer; }
+.sign-page-strip > button.active { border-color: var(--primary); background: var(--primary-light); }
+.sign-workspace .sign-page-strip .pdf-page-thumbnail { height: 65px; min-height: 65px; padding: 0; background: white; }
+.sign-page-strip .pdf-page-thumbnail canvas { max-height: 65px; }
+.sign-page-strip > button > span { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 4px; font-size: 10px; }
+.sign-page-strip b { font-size: 9px; border-radius: 4px; padding: 1px 3px; background: var(--primary); color: var(--text-on-primary); }
+.sign-image-status, .sign-loading { display: flex; align-items: center; gap: 7px; color: var(--text-muted); font-size: 12px; margin-top: 10px; }
+.sign-progress { display: flex; align-items: center; gap: 16px; margin-top: 14px; }
+.sign-progress > div { flex: 1; }
+.sign-error { margin-top: 12px; padding: 10px; border-radius: 7px; background: var(--danger-light); color: var(--danger); font-size: 12px; }
+.sign-spin { animation: sign-spin 1s linear infinite; }
+@keyframes sign-spin { to { transform: rotate(360deg); } }
+@media (max-width: 900px) {
+  .sign-layout { grid-template-columns: 255px minmax(0, 1fr); gap: 12px; }
+  .sign-builder.tool-panel { padding: 14px; }
+  .sign-page-scroll { padding: 16px; }
+  .sign-page-toolbar .sign-icon { width: 28px; }
+}
+@media (max-width: 680px) {
+  .sign-layout { grid-template-columns: minmax(0, 1fr); }
+  .sign-document-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; }
+  .sign-document-actions { justify-content: flex-end; gap: 4px; }
+  .sign-file strong { font-size: 12px; }
+  .sign-ink-pad { max-width: 340px; margin-inline: auto; }
+  .sign-library > div { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sign-canvas-area { min-height: 360px; height: 66vh; }
+  .sign-page-toolbar { gap: 4px; }
+  .sign-page-toolbar .sign-icon { width: 26px; }
+  .sign-object-tools { padding-left: 3px; }
+}

@@ -1,0 +1,42 @@
+.fingerprint-workspace { min-width: 0; }
+.fingerprint-upload .drop-zone { min-height: 220px; padding: 32px; }
+.fingerprint-upload svg { color: var(--primary); margin-bottom: 14px; }
+.fingerprint-filebar { display: flex; align-items: center; gap: 12px; padding: 13px 16px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 17px; }
+.fingerprint-filebar > svg { color: var(--primary); flex-shrink: 0; }
+.fingerprint-filebar > div { flex: 1; min-width: 0; }
+.fingerprint-filebar strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+.fingerprint-filebar span { display: block; margin-top: 4px; color: var(--text-muted); font-size: 11px; }
+.fingerprint-workspace button:disabled { opacity: .5; cursor: default; }
+.fingerprint-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); gap: 18px; align-items: start; }
+.fingerprint-results.tool-panel, .fingerprint-compare.tool-panel { margin: 0; padding: 22px; min-width: 0; }
+.fingerprint-hash-row { margin-bottom: 20px; }
+.fingerprint-hash-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.fingerprint-hash-heading h2, .fingerprint-compare h2 { font-size: 14px; font-weight: 600; margin: 0; }
+.fingerprint-hash-row.primary h2 { color: var(--primary); }
+.fingerprint-hash-heading .btn { font-size: 11px; }
+.fingerprint-hash-value { display: block; width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; resize: none; background: var(--bg-surface-2); color: var(--text-primary); font-family: var(--font-mono); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; word-break: break-all; }
+.fingerprint-hash-value:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.fingerprint-legacy { margin-top: 5px; border-top: 1px solid var(--border); padding-top: 14px; }
+.fingerprint-legacy > summary { cursor: pointer; color: var(--text-muted); font-size: 11px; }
+.fingerprint-legacy[open] > summary { margin-bottom: 15px; }
+.fingerprint-export { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 21px; }
+.fingerprint-export .btn { font-size: 12px; }
+.fingerprint-compare h2 { margin-bottom: 18px; }
+.fingerprint-compare > label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+.fingerprint-compare > textarea { font-family: var(--font-mono); font-size: 12px; line-height: 1.7; resize: vertical; min-height: 110px; overflow-wrap: anywhere; }
+.fingerprint-compare-message { color: var(--text-muted); font-size: 11px; line-height: 1.6; margin: 12px 0 0; }
+.fingerprint-comparison { display: flex; align-items: center; gap: 10px; margin-top: 15px; padding: 13px; border: 1px solid var(--border); border-radius: 8px; }
+.fingerprint-comparison.match { color: var(--primary); background: var(--primary-light); border-color: var(--primary); }
+.fingerprint-comparison.mismatch { color: var(--danger); background: var(--danger-light); border-color: var(--danger); }
+.fingerprint-comparison > svg { flex-shrink: 0; }
+.fingerprint-comparison strong { display: block; font-size: 12px; }
+.fingerprint-comparison span { display: block; font-size: 10px; margin-top: 4px; }
+.fingerprint-note { color: var(--text-muted); font-size: 11px; line-height: 1.7; margin: 17px 0 0; }
+.fingerprint-progress.tool-panel { display: flex; align-items: center; gap: 16px; padding: 16px; margin-bottom: 17px; }
+.fingerprint-progress > div { flex: 1; min-width: 0; }
+.fingerprint-error, .fingerprint-cancelled { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 12px; padding: 13px; border-radius: 8px; margin-bottom: 16px; }
+.fingerprint-error { color: var(--danger); background: var(--danger-light); }
+.fingerprint-cancelled { color: var(--text-muted); background: var(--bg-surface-2); border: 1px solid var(--border); }
+.fingerprint-empty { padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px; }
+@media (max-width: 850px) { .fingerprint-grid { grid-template-columns: minmax(0, 1fr); }.fingerprint-results.tool-panel, .fingerprint-compare.tool-panel { padding: 17px; } }
+@media (max-width: 550px) { .fingerprint-filebar { flex-wrap: wrap; padding: 11px; gap: 9px; }.fingerprint-filebar > div { flex-basis: calc(100% - 50px); }.fingerprint-filebar strong { font-size: 12px; }.fingerprint-export .btn { flex: 1; font-size: 11px; padding: 10px; }.fingerprint-hash-value { font-size: 11px; } }

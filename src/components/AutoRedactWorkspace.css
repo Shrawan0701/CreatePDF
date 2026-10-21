@@ -1,0 +1,64 @@
+.pii-workspace { min-width: 0; }
+.pii-upload .drop-zone { min-height: 220px; padding: 32px; }
+.pii-upload svg { color: var(--primary); margin-bottom: 14px; }
+.pii-filebar { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); margin-bottom: 16px; }
+.pii-filebar > svg { flex-shrink: 0; color: var(--primary); }
+.pii-filebar > div { flex: 1; min-width: 0; }
+.pii-filebar strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+.pii-filebar span { display: block; margin-top: 3px; color: var(--text-muted); font-size: 11px; }
+.pii-grid { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 18px; align-items: start; }
+.pii-controls.tool-panel { margin: 0; padding: 18px; min-width: 0; }
+.pii-controls .form-label, .pii-controls .form-input, .pii-controls .form-select { font-size: 12px; }
+.pii-scan-controls { display: flex; gap: 8px; align-items: end; padding-bottom: 17px; border-bottom: 1px solid var(--border); }
+.pii-scan-controls .form-group { flex: 1; min-width: 0; margin: 0; }
+.pii-scan-controls .btn { padding: 10px; font-size: 11px; flex-shrink: 0; }
+.pii-match-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0 12px; }
+.pii-match-heading h2 { margin: 0; font-size: 14px; }
+.pii-match-heading span { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.pii-filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.pii-filters button { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; font-size: 11px; }
+.pii-filters button[aria-pressed="true"] { color: var(--primary); border-color: var(--primary); background: var(--primary-light); }
+.pii-filters span { padding-left: 5px; font-size: 10px; opacity: .75; }
+.pii-select-actions { display: flex; justify-content: space-between; gap: 8px; margin: 10px 0; }
+.pii-select-actions button { padding: 3px 0; background: transparent; font-size: 11px; color: var(--primary); cursor: pointer; }
+.pii-workspace button:disabled { cursor: default; opacity: .5; }
+.pii-matches { display: grid; gap: 7px; max-height: 330px; overflow-y: auto; scrollbar-width: thin; padding: 2px; }
+.pii-match-row { display: flex; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 7px; padding: 9px; background: var(--bg-surface); min-width: 0; }
+.pii-match-row.focused { border-color: var(--primary); background: var(--primary-light); }
+.pii-match-row > input { flex-shrink: 0; accent-color: var(--primary); }
+.pii-match-row > button { text-align: left; background: transparent; color: var(--text-primary); cursor: pointer; min-width: 0; flex: 1; padding: 0; }
+.pii-match-row strong { display: block; overflow-wrap: anywhere; font-size: 12px; font-weight: 500; }
+.pii-match-row span { display: block; margin-top: 4px; color: var(--text-muted); font-size: 10px; }
+.pii-empty, .pii-note { font-size: 11px; line-height: 1.6; color: var(--text-secondary); margin: 12px 0; }
+.pii-note a { color: var(--primary); text-decoration: underline; }
+.pii-export.btn { width: 100%; margin-top: 9px; font-size: 12px; padding: 12px 8px; }
+.pii-output-note { color: var(--text-muted); font-size: 10px; line-height: 1.6; margin: 12px 0 0; }
+.pii-review { min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); overflow: hidden; }
+.pii-review-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); padding: 10px 12px; }
+.pii-review-tabs button { padding: 6px 10px; background: transparent; color: var(--text-secondary); border-radius: 6px; font-size: 12px; cursor: pointer; }
+.pii-review-tabs button[aria-pressed="true"] { background: var(--primary-light); color: var(--primary); }
+.pii-page-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; }
+.pii-page-tools label { display: flex; gap: 7px; align-items: center; font-size: 11px; color: var(--text-secondary); }
+.pii-page-tools input { accent-color: var(--primary); }
+.pii-page-tools select { width: 112px; font-size: 11px; padding: 6px 9px; }
+.pii-page-scroll { display: flex; position: relative; overflow: auto; scrollbar-gutter: stable; height: min(74vh, 860px); min-height: 420px; padding: 18px; background: var(--bg-surface-2); align-items: flex-start; }
+.pii-page-sheet { position: relative; flex-shrink: 0; margin: 0 auto; background: #fff; box-shadow: 0 3px 14px #0002; }
+.pii-page-sheet > canvas { display: block; width: 100%; height: 100%; }
+.pii-match-box { position: absolute; margin: 0; padding: 0; border: 1px dashed #8b9299; border-radius: 1px; background: #8090a01a; cursor: pointer; }
+.pii-match-box.included { border: 1px solid #cb3b3b; background: #ed45453b; }
+.pii-match-box.focused, .pii-match-box:focus-visible { outline: 2px solid #087d65; outline-offset: 2px; z-index: 1; }
+.pii-match-box.masked { background: #000; border-color: #000; }
+.pii-workspace .pii-match-box:disabled { opacity: 1; }
+.pii-page-message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 14px; flex-direction: column; padding: 20px; background: var(--bg-surface-2); color: var(--text-muted); font-size: 12px; text-align: center; }
+.pii-navigation { display: flex; align-items: center; justify-content: center; gap: 15px; padding: 10px; border-top: 1px solid var(--border); }
+.pii-navigation label { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-secondary); }
+.pii-navigation input { width: 60px; padding: 6px; font-size: 12px; }
+.pii-progress { display: flex; align-items: center; gap: 15px; margin-top: 16px; }
+.pii-progress > div { flex: 1; }
+.pii-error { color: var(--danger); background: var(--danger-light); border-radius: 7px; padding: 12px; margin-top: 14px; font-size: 12px; }
+.pii-review .watermark-pdf-preview { border: 0; }
+/* Minimum PDF.js TextLayer styles, scoped to the temporary measuring node. */
+.pii-measure-layer { position: fixed; top: 0; left: -100000px; opacity: 0; pointer-events: none; line-height: 1; letter-spacing: normal; word-spacing: normal; text-size-adjust: none; transform-origin: 0 0; }
+.pii-measure-layer span { position: absolute; white-space: pre; transform-origin: 0 0; line-height: 1; letter-spacing: normal; word-spacing: normal; font-size: calc(var(--total-scale-factor) * var(--min-font-size) * var(--font-height)); transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1)) scale(calc(1 / var(--min-font-size))); }
+@media (max-width: 1050px) { .pii-grid { grid-template-columns: 310px minmax(0, 1fr); gap: 12px; }.pii-controls.tool-panel { padding: 14px; } }
+@media (max-width: 760px) { .pii-grid { grid-template-columns: minmax(0, 1fr); }.pii-review { grid-row: 1; }.pii-page-scroll { min-height: 330px; height: 60vh; }.pii-filebar { flex-wrap: wrap; padding: 11px; gap: 8px; }.pii-filebar strong { font-size: 12px; }.pii-filebar .btn { font-size: 10px; }.pii-matches { max-height: 260px; } }

@@ -1,6 +1,6 @@
 # CreatePDF.si
 
-CreatePDF.si is a local-first PDF toolkit with 64 registered tools for page management, editing, conversion, privacy, business documents, AI document processing, and collaboration. Core document processing runs in the browser. AI tools use same-repository serverless functions and OpenAI `gpt-4o-mini`.
+CreatePDF.si is a local-first PDF toolkit with 65 registered tools for page management, editing, conversion, privacy, business documents, AI document processing, and collaboration. Core document processing runs in the browser. AI tools use same-repository serverless functions and OpenAI `gpt-4o-mini`.
 
 ## Run locally
 
@@ -73,7 +73,7 @@ npm audit --omit=dev
 `npm run build` creates one public HTML page per tool plus the homepage. Their titles, descriptions, canonical links, Open Graph/Twitter cards, JSON-LD, step-by-step guides, limitations, FAQs and internal links are present in the initial response, without requiring a crawler to execute JavaScript. The interactive app displays the same guide content and updates metadata during client navigation. The generated content contains no uploaded files or locally saved user data.
 
 - The canonical origin defaults to **https://createpdf.si**. If your production domain differs, set the public `VITE_SITE_URL=https://your-domain.example` at build time, including in Vercel, and rebuild. Use the same value locally if you compare development metadata with production. This is a public URL, never an API key.
-- `dist/sitemap.xml` lists the homepage and all 64 tool routes. `dist/robots.txt` points to it. Settings and missing pages use `noindex`; unknown URLs return HTTP 404 instead of displaying the homepage with a success status.
+- `dist/sitemap.xml` lists the homepage and all 65 tool routes. `dist/robots.txt` points to it. Settings and missing pages use `noindex`; unknown URLs return HTTP 404 instead of displaying the homepage with a success status.
 - `vercel.json` explicitly rewrites each tool route and `/settings` to its generated HTML file. API functions and static files are not sent to the homepage. URL aliases redirect to the clean route. Deploy from the repository root with `npm run build` and `dist` as the output directory. Changes to these files take effect after a new Vercel deployment.
 - When adding or renaming a tool, update its entry in `src/seo/toolGuides.js`, then run `npm run seo:routes` and commit the updated `vercel.json`. The build and tests check route coverage. Common conversion/editing tools have dedicated search titles and prominent internal links; every tool has its own guide.
 - `public/social-card.png` is a bundled 1200 × 630 social-preview image. Run `node scripts/generate-social-card.mjs` locally to regenerate it. Vercel builds do not require a browser executable.
@@ -114,7 +114,9 @@ After deploying, verify the domain in [Google Search Console](https://search.goo
 
 ## Collaboration
 
-Whiteboard room links use `BroadcastChannel` locally and automatically connect to `/signal` in production. Set `VITE_SIGNALING_URL=wss://example.com/signal` when the relay is hosted separately. P2P file sharing uses room-code signaling and WebRTC; file bytes do not pass through the server. Some networks require a TURN relay, which is not bundled.
+Whiteboard has explicit Create room and Join room actions. It uses the dedicated `/whiteboard-signal` WebSocket endpoint, installed by both the Vite dev server and the Node production server; restart the dev server after updating its configuration. A room can have up to 12 participants. The relay orders drawing operations and synchronizes the full board when someone joins. Undo/redo targets action IDs instead of replacing other participants' history. Live drawing data passes through this relay; personal saved boards stay in browser storage. Empty rooms expire after 15 minutes, and restarting the server clears live rooms. Autosave, reopening saved boards and PDF/PNG downloads provide local copies.
+
+Static hosting, including Vercel, needs a separately hosted Node relay. Set the public `VITE_WHITEBOARD_URL=wss://example.com/whiteboard-signal` endpoint before building. The older `VITE_SIGNALING_URL` setting is also accepted, with a trailing `/signal` mapped to `/whiteboard-signal`; update the remote server to support the new endpoint. A room link opens the same website on the receiving device, so use a reachable site address when sharing across devices. The existing P2P file-sharing implementation retains its separate `/signal` endpoint and WebRTC transport; some networks require a TURN relay, which is not bundled.
 
 ## Privacy
 

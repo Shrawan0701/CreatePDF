@@ -195,6 +195,12 @@ export async function savePosProduct(product) {
   await db.put('pos-products', product);
 }
 
+export async function savePosProducts(products) {
+  const db = await getDb();
+  const transaction = db.transaction('pos-products', 'readwrite');
+  await Promise.all([...products.map(product => transaction.store.put(product)), transaction.done]);
+}
+
 export async function getPosProducts() {
   const db = await getDb();
   return db.getAll('pos-products');
@@ -271,6 +277,11 @@ export async function saveWhiteboard(wb) {
 export async function getWhiteboards() {
   const db = await getDb();
   return db.getAll('whiteboards');
+}
+
+export async function getWhiteboard(id) {
+  const db = await getDb();
+  return db.get('whiteboards', id);
 }
 
 // ===== CLEAR ALL =====

@@ -14,6 +14,7 @@ import { clearAllData, deleteDocument, getDocuments, getStorageEstimate, renameD
 const lazyNamed = (loader, name) => lazy(() => loader().then((module) => ({ default: module[name] })))
 const MergePdf = lazy(() => import('./pages/tools/MergePdf'))
 const CompressPdf = lazy(() => import('./pages/tools/CompressPdf'))
+const RepairPdf = lazy(() => import('./pages/tools/RepairPdf'))
 const SplitPdf = lazy(() => import('./pages/tools/SplitPdf'))
 const OrganizePages = lazy(() => import('./pages/tools/OrganizePages'))
 const EditPdf = lazy(() => import('./pages/tools/EditPdf'))
@@ -55,6 +56,7 @@ export const IMPLEMENTED_TOOLS = {
   'merge-pdf': MergePdf,
   'alternate-mix': AlternateMix,
   'compress-pdf': CompressPdf,
+  'repair-pdf': RepairPdf,
   'split-pdf': SplitPdf,
   'split-by-text': SplitByText,
   'split-by-bookmarks': SplitByBookmarks,

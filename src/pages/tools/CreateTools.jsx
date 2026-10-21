@@ -1,63 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Camera, Download, Image as ImageIcon, Type } from 'lucide-react'
+import { ArrowDown, ArrowUp, Camera, Download, Image as ImageIcon } from 'lucide-react'
 import { ToolPage } from '../../components/ToolPage'
 import { DocumentPdfPreview } from '../../components/DocumentPdfPreview'
 import { CreatePdfComposer } from '../../components/CreatePdfComposer'
 import { MarkdownPdfComposer } from '../../components/MarkdownPdfComposer'
 import { DropZone, FileItem, FormGroup, ProgressBar, downloadBlob } from '../../components/ui'
 import { useApp } from '../../context/AppContext'
-import { extractText, getPdfLib, imagesToPdf } from '../../services/pdfEngine'
+import { getPdfLib, imagesToPdf } from '../../services/pdfEngine'
 import { richHtmlToPdf, sanitizeDocumentHtml } from '../../services/richPdf'
 import { styledHtmlToPdf } from '../../services/htmlImport'
 import { EbookPdfComposer } from '../../components/EbookPdfComposer'
 import { CsvPdfComposer } from '../../components/CsvPdfComposer'
+import { PdfHandwritingWorkspace } from '../../components/PdfHandwritingWorkspace'
+import { TextHandwritingWorkspace } from '../../components/TextHandwritingWorkspace'
+import { HandwritingCaptureWorkspace } from '../../components/HandwritingCaptureWorkspace'
 
-
-async function handwritingTextToPdf(text, options = {}) {
-  const pageWidth = 1240
-  const pageHeight = 1754
-  const margin = 110
-  const lineHeight = Number(options.lineHeight || 58)
-  const fontSize = Number(options.fontSize || 38)
-  const fontFamily = options.fontFamily || '"Segoe Print", "Comic Sans MS", cursive'
-  const canvas = document.createElement('canvas')
-  canvas.width = pageWidth
-  canvas.height = pageHeight
-  const context = canvas.getContext('2d')
-  context.font = `${fontSize}px ${fontFamily}`
-  const lines = []
-  for (const paragraph of text.replace(/\r/g, '').split('\n')) {
-    if (!paragraph.trim()) { lines.push(''); continue }
-    let line = ''
-    for (const word of paragraph.split(/\s+/)) {
-      const candidate = line ? `${line} ${word}` : word
-      if (context.measureText(candidate).width > pageWidth - margin * 2 && line) { lines.push(line); line = word } else line = candidate
-    }
-    lines.push(line)
-  }
-  const linesPerPage = Math.floor((pageHeight - margin * 2) / lineHeight)
-  const { PDFDocument } = await getPdfLib()
-  const pdf = await PDFDocument.create()
-  for (let offset = 0; offset < Math.max(1, lines.length); offset += linesPerPage) {
-    context.fillStyle = options.paper === 'white' ? '#ffffff' : options.paper === 'cream' ? '#fff8e7' : '#fffef8'
-    context.fillRect(0, 0, pageWidth, pageHeight)
-    if (options.rules !== 'none') {
-      context.strokeStyle = options.rules === 'gray' ? '#d5d5d5' : '#c9d9ef'
-      context.lineWidth = 2
-      for (let y = margin + lineHeight; y < pageHeight - margin; y += lineHeight) { context.beginPath(); context.moveTo(margin, y); context.lineTo(pageWidth - margin, y); context.stroke() }
-      context.strokeStyle = '#efb7b7'
-      context.beginPath(); context.moveTo(margin + 35, 0); context.lineTo(margin + 35, pageHeight); context.stroke()
-    }
-    context.fillStyle = options.ink || '#17345f'
-    context.font = `${fontSize}px ${fontFamily}`
-    context.textBaseline = 'alphabetic'
-    lines.slice(offset, offset + linesPerPage).forEach((line, index) => context.fillText(line, margin + 55, margin + (index + 1) * lineHeight - 10))
-    const image = await pdf.embedPng(await (await fetch(canvas.toDataURL('image/png'))).arrayBuffer())
-    const page = pdf.addPage([595, 842])
-    page.drawImage(image, { x: 0, y: 0, width: 595, height: 842 })
-  }
-  return new Blob([await pdf.save()], { type: 'application/pdf' })
-}
 
 function TextDocumentTool({ toolId, initialText = '', transform = (value) => value, helper, rich = false }) {
   const { showToast } = useApp()
@@ -184,15 +141,7 @@ function TextDocumentTool({ toolId, initialText = '', transform = (value) => val
 export function CreatePdf() { return <CreatePdfComposer /> }
 export function MarkdownToPdf() { return <MarkdownPdfComposer /> }
 export function HtmlToPdf() { return <TextDocumentTool toolId="html-to-pdf" initialText={'<h1>Document title</h1>\n<p>Paste HTML here, including its CSS.</p>'} helper="HTML and CSS are rendered on this app’s server. Grids, colors, inline styles and public HTTPS assets are preserved. Scripts stay disabled; use embedded images for files stored on your computer." /> }
-export function TextToHandwriting() {
-  const { showToast } = useApp()
-  const [text, setText] = useState('Dear reader,\n\nType your handwritten-style note here.')
-  const [busy, setBusy] = useState(false)
-  const [options, setOptions] = useState({ fontFamily: '"Segoe Print", cursive', ink: '#17345f', paper: 'ivory', rules: 'blue', fontSize: 38, lineHeight: 58 })
-  const change = (key, value) => setOptions((current) => ({ ...current, [key]: value }))
-  const create = async () => { if (!text.trim()) return; setBusy(true); try { downloadBlob(await handwritingTextToPdf(text, options), 'handwriting.pdf'); showToast('Handwriting PDF created.', 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId="text-to-handwriting"><div className="composer-layout"><div className="tool-panel"><FormGroup label="Text"><textarea className="form-textarea composer-editor" value={text} onChange={(event) => setText(event.target.value)} /></FormGroup><div className="form-grid"><FormGroup label="Writing style"><select className="form-select" value={options.fontFamily} onChange={(event) => change('fontFamily', event.target.value)}><option value={'"Segoe Print", cursive'}>Natural print</option><option value={'"Comic Sans MS", cursive'}>Casual</option><option value={'cursive'}>Script</option><option value={'Georgia, serif'}>Formal</option></select></FormGroup><FormGroup label="Ink"><input className="form-input" type="color" value={options.ink} onChange={(event) => change('ink', event.target.value)} /></FormGroup><FormGroup label="Paper"><select className="form-select" value={options.paper} onChange={(event) => change('paper', event.target.value)}><option value="ivory">Ivory</option><option value="white">White</option><option value="cream">Cream</option></select></FormGroup><FormGroup label="Rules"><select className="form-select" value={options.rules} onChange={(event) => change('rules', event.target.value)}><option value="blue">Blue ruled</option><option value="gray">Gray ruled</option><option value="none">Blank</option></select></FormGroup><FormGroup label="Text size"><input className="form-input" type="number" min="24" max="64" value={options.fontSize} onChange={(event) => change('fontSize', event.target.value)} /></FormGroup><FormGroup label="Line spacing"><input className="form-input" type="number" min="44" max="90" value={options.lineHeight} onChange={(event) => change('lineHeight', event.target.value)} /></FormGroup></div><button className="btn btn-primary btn-lg" disabled={busy || !text.trim()} onClick={create}><Download size={17} /> Create handwriting PDF</button></div><div className="tool-panel document-preview"><span className="preview-label">Handwriting preview</span><div className="paper-preview handwriting-preview" style={{ fontFamily: options.fontFamily, color: options.ink, fontSize: options.fontSize / 3, lineHeight: `${options.lineHeight / options.fontSize}` }}>{text}</div></div></div></ToolPage>
-}
+export function TextToHandwriting() { return <TextHandwritingWorkspace /> }
 
 export function EbookToPdf() { return <EbookPdfComposer /> }
 
@@ -208,15 +157,6 @@ function ImagePdfTool({ toolId, camera = false }) {
 }
 
 export function ScanDocument() { return <ImagePdfTool toolId="scan-document" camera /> }
-export function HandwritingToPdf() { return <ImagePdfTool toolId="handwriting-to-pdf" /> }
+export function HandwritingToPdf() { return <HandwritingCaptureWorkspace /> }
 
-export function PdfToHandwriting() {
-  const { showToast } = useApp()
-  const [file, setFile] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [style, setStyle] = useState('"Segoe Print", cursive')
-  const [ink, setInk] = useState('#17345f')
-  const convert = async () => { setBusy(true); try { const text = await extractText(file, setProgress); if (!text.trim()) throw new Error('No selectable text found. OCR is required for scanned PDFs.'); downloadBlob(await handwritingTextToPdf(text, { fontFamily: style, ink }), `handwriting-${file.name}`); showToast('Handwriting PDF created.', 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId="pdf-to-handwriting"><div className="tool-panel"><DropZone accept={['application/pdf']} onFiles={([selected]) => setFile(selected)}><Type size={28} /><div className="drop-zone-title">Choose a text-based PDF</div><div className="drop-zone-sub">Selectable text is rewritten onto ruled handwriting pages.</div></DropZone>{file && <FileItem file={file} onRemove={() => setFile(null)} />}<div className="form-grid"><FormGroup label="Writing style"><select className="form-select" value={style} onChange={(event) => setStyle(event.target.value)}><option value={'"Segoe Print", cursive'}>Natural print</option><option value={'"Comic Sans MS", cursive'}>Casual</option><option value={'cursive'}>Script</option></select></FormGroup><FormGroup label="Ink"><input className="form-input" type="color" value={ink} onChange={(event) => setInk(event.target.value)} /></FormGroup></div></div>{busy && <ProgressBar value={progress} label="Extracting and rewriting text" />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={convert}><Download size={17} /> Download handwriting PDF</button></ToolPage>
-}
+export const PdfToHandwriting = PdfHandwritingWorkspace

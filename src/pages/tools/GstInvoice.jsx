@@ -1,436 +1,266 @@
-import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Download, Plus, Printer, Save, Upload, X, Eye } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Download, Eye, FilePlus2, Plus, Save, Trash2, Upload, X } from 'lucide-react';
 import { ToolPage } from '../../components/ToolPage';
-import { Tabs, FormGroup, downloadBlob, generateId } from '../../components/ui';
+import { FormGroup, downloadBlob } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
 import { deleteInvoice, getInvoices, getProfiles, saveInvoice, saveProfile } from '../../services/storage';
-import { getPdfLib } from '../../services/pdfEngine';
-import { drawUnicodeText, embedUnicodeFonts } from '../../services/unicodePdf';
+import { GST_STATES, additionalTaxTotals, gstInvoiceErrors, gstLine, gstTotals, invoiceTaxName, isDomesticIndia, isIndianInvoice, money, newGstInvoice, newInvoiceItem, nextInvoiceNumber, normalizeGstInvoice, stateForGstin, supplyState, taxLabel } from '../../services/gstInvoice';
+import { INVOICE_COUNTRIES, INVOICE_CURRENCIES, countryCurrency, countryTax } from '../../services/invoiceLocale';
+import { importSignatureImage } from '../../services/pdfSigning';
+import { createGstInvoicePdf } from '../../services/gstInvoicePdf';
+import { exportEditableInvoicePdf, importEditableInvoicePdf } from '../../services/invoicePdfData';
+import { WatermarkPdfPreview } from '../../components/WatermarkPdfPreview';
+import '../../components/WatermarkWorkspace.css';
+import './GstInvoice.css';
 
-const GST_RATES = [0, 5, 12, 18, 28];
-const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Jammu and Kashmir','Ladakh','Chandigarh','Puducherry'];
-
-function emptyInvoice() {
-  return {
-    id: generateId(),
-    createdAt: Date.now(),
-    invoiceType: 'tax',
-    invoiceNumber: `INV-${Date.now().toString().slice(-6)}`,
-    invoiceDate: new Date().toISOString().slice(0, 10),
-    dueDate: '',
-    placeOfSupply: 'Maharashtra',
-    reverseCharge: false,
-    currency: 'INR',
-    paymentTerms: 'Net 30',
-    seller: {
-      tradeName: '', legalName: '', gstin: '', pan: '', address: '',
-      city: '', state: 'Maharashtra', pin: '', phone: '', email: '',
-      website: '', bankName: '', accountNumber: '', ifsc: '', upiId: '', logo: null
-    },
-    buyer: {
-      name: '', businessName: '', gstin: '', billingAddress: '', shippingAddress: '',
-      state: '', pin: '', phone: '', email: ''
-    },
-    items: [
-      { id: generateId(), name: '', description: '', hsn: '', qty: 1, unit: 'pcs', rate: 0, discount: 0, gstRate: 18 }
-    ],
-    notes: '', terms: 'Payment due within 30 days.'
-  };
+function Field({ label, value, onChange, multiline, ...props }) {
+  return <FormGroup label={label}>{multiline ? <textarea className="form-textarea" rows={2} value={value ?? ''} onChange={event => onChange(event.target.value)} {...props} /> : <input className="form-input" value={value ?? ''} onChange={event => onChange(event.target.value)} {...props} />}</FormGroup>;
 }
+function StateField({ label, value, onChange }) {
+  return <FormGroup label={label}><select className="form-select" value={value} onChange={event => onChange(event.target.value)}><option value="">Choose state / UT</option>{GST_STATES.map(state => <option key={state.code} value={state.name}>{state.name} ({state.code})</option>)}</select></FormGroup>;
+}
+function CountryField({ label, value, onChange }) {
+  return <FormGroup label={label}><select className="form-select" value={value} onChange={event => onChange(event.target.value)}><option value="">Choose country</option>{INVOICE_COUNTRIES.map(country => <option key={country.code} value={country.code}>{country.name}</option>)}</select></FormGroup>;
+}
+function ItemInput({ label, ...props }) {
+  return <label className="gst-item-field"><span>{label}</span><input className="form-input" {...props} /></label>;
+}
+const filename = invoice => `invoice-${invoice.invoiceNumber.replace(/[^a-z0-9-]/gi, '-')}.pdf`;
 
-function calcItem(item, sellerState, placeOfSupply, invoiceType = 'tax') {
-  const taxable = (item.qty * item.rate) * (1 - item.discount / 100);
-  const gstAmt = invoiceType === 'bill-of-supply' ? 0 : taxable * (item.gstRate / 100);
-  const intraState = sellerState === placeOfSupply;
-  const cgst = intraState ? gstAmt / 2 : 0;
-  const sgst = intraState ? gstAmt / 2 : 0;
-  const igst = !intraState ? gstAmt : 0;
-  return { taxable, cgst, sgst, igst, total: taxable + gstAmt };
+function PdfReview({ blob, onClose, onDownload }) {
+  const [page, setPage] = useState(1), [count, setCount] = useState(1), [url, setUrl] = useState('');
+  const dialog = useRef(null);
+  useEffect(() => {
+    const location = URL.createObjectURL(blob); setUrl(location);
+    const previous = document.activeElement; dialog.current?.showModal();
+    return () => { URL.revokeObjectURL(location); previous?.focus(); };
+  }, [blob]);
+  useEffect(() => {
+    let cancelled = false;
+    import('pdf-lib').then(async ({ PDFDocument }) => {
+      const document = await PDFDocument.load(await blob.arrayBuffer());
+      if (!cancelled) setCount(document.getPageCount());
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [blob]);
+  return <dialog ref={dialog} className="gst-pdf-dialog" aria-label="Invoice PDF preview" onCancel={event => { event.preventDefault(); onClose(); }}>
+    <div className="gst-preview-heading"><strong>Invoice PDF</strong><div><button className="btn btn-primary btn-sm" onClick={onDownload}><Download size={14} /> Download</button>{url && <a className="btn btn-secondary btn-sm" href={url} target="_blank" rel="noreferrer">Open PDF to print</a>}<button className="icon-btn" onClick={onClose} aria-label="Close invoice preview"><X size={18} /></button></div></div>
+    <WatermarkPdfPreview blob={blob} page={page} pageCount={count} onPage={setPage} label="Invoice PDF" />
+  </dialog>;
 }
 
 export default function GstInvoice() {
-  const [invoice, setInvoice] = useState(emptyInvoice());
-  const [tab, setTab] = useState('seller');
-  const [processing, setProcessing] = useState(false);
-  const [drafts, setDrafts] = useState([]);
-  const [profiles, setProfiles] = useState([]);
+  const [invoice, setInvoice] = useState(() => newGstInvoice());
+  const initial = useRef(invoice), editor = useRef(null), errorsRef = useRef(null), operation = useRef(false), mounted = useRef(true);
+  const [drafts, setDrafts] = useState([]), [profiles, setProfiles] = useState([]);
+  const [busy, setBusy] = useState(''), [submitted, setSubmitted] = useState(false), [failure, setFailure] = useState('');
+  const [preview, setPreview] = useState(null), [cache, setCache] = useState(null);
   const { showToast } = useApp();
-
-  const refreshSaved = async () => { setDrafts(await getInvoices()); setProfiles(await getProfiles()); };
-  useEffect(() => { refreshSaved(); }, []);
-
-  const update = (path, value) => {
-    setInvoice((prev) => {
-      const parts = path.split('.');
-      const clone = { ...prev };
-      let ref = clone;
-      for (let i = 0; i < parts.length - 1; i++) {
-        ref[parts[i]] = { ...ref[parts[i]] };
-        ref = ref[parts[i]];
+  const totals = gstTotals(invoice), errors = submitted ? gstInvoiceErrors(invoice, drafts) : [];
+  const india = isIndianInvoice(invoice), intra = isDomesticIndia(invoice) && invoice.seller.state === supplyState(invoice), billOfSupply = invoice.invoiceType !== 'tax';
+  const taxName = invoiceTaxName(invoice);
+  const fmt = amount => money(amount, invoice.currency, invoice.seller.country);
+  useEffect(() => {
+    mounted.current = true;
+    Promise.all([getInvoices(), getProfiles()]).then(([saved, businesses]) => {
+      if (!mounted.current) return;
+      setDrafts(saved); setProfiles(businesses);
+      setInvoice(current => current === initial.current ? { ...current, invoiceNumber: nextInvoiceNumber(saved) } : current);
+    }).catch(() => { if (mounted.current) showToast('Saved profiles and drafts could not be loaded. You can still create an invoice.', 'error'); });
+    return () => { mounted.current = false; };
+  }, []);
+  const update = (key, value) => {
+    setFailure('');
+    setInvoice(current => {
+      const [group, field] = key.split('.');
+      if (!field) return { ...current, [key]: value };
+      const party = { ...current[group], [field]: value };
+      if (field === 'gstin') { party.gstin = value.toUpperCase().replace(/\s/g, ''); const state = stateForGstin(party.gstin); if (state && party.country === 'IN') party.state = state; }
+      if (field === 'taxId' && !party.country && /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[A-Z0-9]$/i.test(value.replace(/\s/g, ''))) {
+        party.country = 'IN'; party.gstin = value.replace(/\s/g, '').toUpperCase(); party.taxId = ''; party.state = stateForGstin(party.gstin) || '';
+        if (group === 'seller') {
+          const pristine = !current.items.some(item => item.rate !== '' && Number(item.rate));
+          return { ...current, seller: party, buyer: { ...current.buyer, country: current.buyer.country || 'IN' },
+            ...(pristine ? { currency: 'INR', items: current.items.map(item => ({ ...item, gstRate: 18 })) } : {}) };
+        }
       }
-      ref[parts[parts.length - 1]] = value;
-      return clone;
+      return { ...current, [group]: party };
     });
   };
-
-  const addItem = () => setInvoice((prev) => ({
-    ...prev,
-    items: [...prev.items, { id: generateId(), name: '', description: '', hsn: '', qty: 1, unit: 'pcs', rate: 0, discount: 0, gstRate: 18 }]
-  }));
-
-  const removeItem = (id) => setInvoice((prev) => ({ ...prev, items: prev.items.filter((i) => i.id !== id) }));
-
-  const updateItem = (id, field, value) => setInvoice((prev) => ({
-    ...prev,
-    items: prev.items.map((it) => it.id === id ? { ...it, [field]: value } : it)
-  }));
-
-  const totals = invoice.items.reduce((acc, item) => {
-    const c = calcItem(item, invoice.seller.state, invoice.placeOfSupply, invoice.invoiceType);
-    return {
-      taxable: acc.taxable + c.taxable,
-      cgst: acc.cgst + c.cgst,
-      sgst: acc.sgst + c.sgst,
-      igst: acc.igst + c.igst,
-      total: acc.total + c.total,
-    };
-  }, { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0 });
-
-  const handleSave = async () => {
-    await saveInvoice({ ...invoice, savedAt: Date.now() });
-    await refreshSaved();
-    showToast('Invoice saved!', 'success');
+  const chooseCountry = (group, country) => {
+    setFailure('');
+    const hasAmounts = invoice.items.some(item => item.rate !== '' && Number(item.rate) !== 0);
+    setInvoice(current => {
+      const next = { ...current, [group]: { ...current[group], country, state: '' } };
+      if (group === 'seller') {
+        next.taxName = '';
+        if (country !== 'IN' && current.invoiceType === 'bill-of-supply') next.invoiceType = 'standard';
+        if (!hasAmounts) {
+          next.currency = countryCurrency(country);
+          next.items = current.items.map(item => ({ ...item, gstRate: country === 'IN' ? 18 : 0 }));
+        }
+        if (!current.buyer.country) next.buyer = { ...current.buyer, country };
+        if (current.invoiceNumber === nextInvoiceNumber(drafts, current.invoiceDate, current.seller.country)) next.invoiceNumber = nextInvoiceNumber(drafts, current.invoiceDate, country);
+      }
+      next.placeOfSupply = '';
+      const detected = country === 'IN' && stateForGstin(next[group].gstin);
+      if (detected) next[group].state = detected;
+      return next;
+    });
+    if (group === 'seller' && hasAmounts) showToast('Country updated. Currency and entered tax rates were kept; review them for this invoice.', 'info');
   };
-  const moveItem = (index, direction) => setInvoice((current) => { const target = index + direction; if (target < 0 || target >= current.items.length) return current; const items = [...current.items]; [items[index], items[target]] = [items[target], items[index]]; return { ...current, items }; });
-  const saveBusinessProfile = async () => { const profile = { ...invoice.seller, id: invoice.seller.gstin || generateId(), name: invoice.seller.tradeName || invoice.seller.legalName || 'Business profile' }; await saveProfile(profile); await refreshSaved(); showToast('Business profile saved locally.', 'success'); };
-  const exportData = () => downloadBlob(new Blob([JSON.stringify(invoice, null, 2)], { type: 'application/json' }), `invoice-${invoice.invoiceNumber}.json`);
-  const importData = async (file) => { try { const data = JSON.parse(await file.text()); if (!data.items || !data.seller) throw new Error('Invalid invoice file.'); setInvoice({ ...emptyInvoice(), ...data, id: generateId() }); showToast('Invoice data imported.', 'success') } catch (error) { showToast(error.message, 'error') } };
-
-  const handleDownload = async () => {
-    setProcessing(true);
+  const itemUpdate = (id, field, value) => { setFailure(''); setInvoice(current => ({ ...current, items: current.items.map(item => item.id === id ? { ...item, [field]: value } : item) })); };
+  const moveItem = (index, direction) => setInvoice(current => {
+    const items = [...current.items], target = index + direction;
+    if (target < 0 || target >= items.length) return current;
+    [items[index], items[target]] = [items[target], items[index]];
+    return { ...current, items };
+  });
+  const refreshDrafts = async () => { const saved = await getInvoices(); if (mounted.current) setDrafts(saved); return saved; };
+  const action = async (label, work) => {
+    if (operation.current) return;
+    operation.current = true; setBusy(label); setFailure('');
+    try { await work(); } catch (error) { if (mounted.current) { setFailure(error.message || 'The invoice action could not finish.'); showToast(error.message || 'The invoice action could not finish.', 'error'); } }
+    finally { operation.current = false; if (mounted.current) setBusy(''); }
+  };
+  const saveDraft = () => action('Saving draft', async () => {
+    await saveInvoice({ ...invoice, savedAt: Date.now() }); await refreshDrafts();
+    if (mounted.current) showToast('Draft saved on this device.', 'success');
+  });
+  const saveBusiness = () => action('Saving business', async () => {
+    if (!(invoice.seller.legalName || invoice.seller.tradeName).trim()) throw new Error('Enter a business name before saving its profile.');
+    await saveProfile({ ...invoice.seller, schemaVersion: 2, id: `${invoice.seller.country}:${(india ? invoice.seller.gstin : invoice.seller.taxId) || (invoice.seller.legalName || invoice.seller.tradeName).trim()}`, name: invoice.seller.legalName || invoice.seller.tradeName });
+    const saved = await getProfiles();
+    if (mounted.current) { setProfiles(saved); showToast('Business details saved for reuse.', 'success'); }
+  });
+  const generate = kind => action('Creating PDF', async () => {
+    setSubmitted(true);
+    let saved = drafts;
+    try { saved = await getInvoices(); if (mounted.current) setDrafts(saved); } catch { /* PDF creation remains available without local storage. */ }
+    const issues = gstInvoiceErrors(invoice, saved);
+    if (issues.length) { setPreview(null); requestAnimationFrame(() => { errorsRef.current?.focus(); errorsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }); return; }
+    const blob = cache?.invoice === invoice ? cache.blob : await createGstInvoicePdf(invoice);
+    if (!mounted.current) return;
+    setCache({ invoice, blob });
+    if (kind === 'preview') { setPreview(blob); return; }
+    const output = kind === 'export' ? await exportEditableInvoicePdf(blob, invoice) : blob;
+    if (!mounted.current) return;
+    downloadBlob(output, kind === 'export' ? `editable-${filename(invoice)}` : filename(invoice));
+    try { await saveInvoice({ ...invoice, savedAt: Date.now() }); await refreshDrafts(); }
+    catch { if (mounted.current) showToast('PDF downloaded. The draft could not be saved on this device.', 'error'); }
+  });
+  const load = data => { setInvoice(normalizeGstInvoice(data)); setSubmitted(false); setFailure(''); setCache(null); };
+  const importData = file => action('Importing invoice', async () => {
+    const restored = await importEditableInvoicePdf(file);
+    if (!mounted.current) return;
+    const existing = drafts.find(draft => draft.id === restored.id && draft.invoiceNumber === restored.invoiceNumber);
+    load({ ...restored, id: existing?.id || crypto.randomUUID(), createdAt: existing?.createdAt || Date.now() });
+    if (mounted.current) showToast('Invoice imported.', 'success');
+  });
+  const useProfile = id => {
+    const profile = profiles.find(item => item.id === id);
+    if (!profile) return;
     try {
-      const { PDFDocument, StandardFonts, rgb } = await getPdfLib();
-      const pdfDoc = await PDFDocument.create();
-      let page = pdfDoc.addPage([595, 842]);
-      const { width, height } = page.getSize();
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      const unicodeFonts = { ...await embedUnicodeFonts(pdfDoc), baseBold: boldFont };
-      const curr = invoice.currency || 'INR';
-      const documentTitle = invoice.invoiceType === 'bill-of-supply' ? 'BILL OF SUPPLY' : 'TAX INVOICE';
-      const fmt = (n) => `${curr} ${Number(n).toFixed(2)}`;
-      let y = height - 40;
-
-      const text = (t, x, fy, sz = 10, bold = false, col = rgb(0, 0, 0)) => {
-        drawUnicodeText(page, t, { x, y: fy, size: sz, font: bold ? boldFont : font, color: col }, unicodeFonts);
-      };
-      const cols = [42, 287, 340, 402, 475];
-      const headers = ['Item / Description', 'HSN', 'Qty', 'Taxable', 'Total'];
-      const drawTableHeader = () => {
-        page.drawRectangle({ x: 40, y: y - 17, width: width - 80, height: 22, color: rgb(0.95, 0.95, 1) });
-        y -= 13;
-        headers.forEach((header, index) => text(header, cols[index], y, 8, true));
-        y -= 7;
-        page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-        y -= 15;
-      };
-      const addContinuationPage = () => {
-        page = pdfDoc.addPage([595, 842]);
-        y = height - 40;
-        text(`${documentTitle} ${invoice.invoiceNumber} (continued)`, 40, y, 11, true, rgb(0.27, 0.25, 1));
-        y -= 24;
-        drawTableHeader();
-      };
-
-      // Header
-      text(documentTitle, width / 2 - 50, y, 16, true, rgb(0.27, 0.25, 1));
-      y -= 24;
-      text(invoice.seller.tradeName || invoice.seller.legalName || 'Company Name', 40, y, 12, true);
-      y -= 16;
-      text(invoice.seller.address + ', ' + invoice.seller.city + ', ' + invoice.seller.state + ' - ' + invoice.seller.pin, 40, y, 9);
-      if (invoice.seller.gstin) { y -= 13; text('GSTIN: ' + invoice.seller.gstin, 40, y, 9, true); }
-
-      y -= 20;
-      page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-      y -= 16;
-
-      // Invoice details
-      text('Invoice No: ' + invoice.invoiceNumber, 40, y, 9, true);
-      text('Date: ' + invoice.invoiceDate, width - 160, y, 9);
-      y -= 13;
-      text('Place of Supply: ' + invoice.placeOfSupply, 40, y, 9);
-      if (invoice.dueDate) text('Due Date: ' + invoice.dueDate, width - 160, y, 9);
-
-      y -= 20;
-      // Bill to
-      text('BILL TO', 40, y, 9, true, rgb(0.27, 0.25, 1));
-      y -= 13;
-      text(invoice.buyer.name || invoice.buyer.businessName || 'Customer', 40, y, 10, true);
-      y -= 13;
-      text(invoice.buyer.billingAddress || '', 40, y, 9);
-      if (invoice.buyer.gstin) { y -= 12; text('GSTIN: ' + invoice.buyer.gstin, 40, y, 9); }
-
-      y -= 20;
-      page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-      y -= 3;
-      drawTableHeader();
-
-      for (const item of invoice.items) {
-        if (y < 195) addContinuationPage();
-        const c = calcItem(item, invoice.seller.state, invoice.placeOfSupply, invoice.invoiceType);
-        text(item.name.slice(0, 42), cols[0], y, 8, true);
-        text(String(item.hsn || '').slice(0, 8), cols[1], y, 8);
-        text(`${item.qty} ${item.unit}`, cols[2], y, 8);
-        text(fmt(c.taxable), cols[3], y, 8);
-        text(fmt(c.total), cols[4], y, 8);
-        y -= 12;
-        const detail = [item.description, `Rate ${fmt(item.rate)}`, item.discount ? `Disc ${item.discount}%` : '', invoice.invoiceType === 'tax' ? `GST ${item.gstRate}%` : ''].filter(Boolean).join('  ·  ');
-        text(detail.slice(0, 78), cols[0], y, 7, false, rgb(0.35, 0.37, 0.43));
-        y -= 18;
-      }
-
-      if (y < 180) {
-        page = pdfDoc.addPage([595, 842]);
-        y = height - 50;
-        text(`${documentTitle} ${invoice.invoiceNumber} - Summary`, 40, y, 11, true, rgb(0.27, 0.25, 1));
-        y -= 28;
-      }
-
-      y -= 4;
-      page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-      y -= 18;
-
-      // Totals
-      const labelX = width - 230;
-      const valueX = width - 120;
-      const tRow = (label, value, bold = false) => {
-        text(label, labelX, y, 9, bold);
-        text(value, valueX, y, 9, bold);
-        y -= 14;
-      };
-      tRow('Taxable Amount:', fmt(totals.taxable));
-      if (totals.cgst > 0) { tRow('CGST:', fmt(totals.cgst)); tRow('SGST:', fmt(totals.sgst)); }
-      if (totals.igst > 0) tRow('IGST:', fmt(totals.igst));
-      y -= 2;
-      page.drawLine({ start: { x: labelX - 10, y }, end: { x: width - 40, y }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
-      y -= 14;
-      tRow('Grand Total:', fmt(totals.total), true);
-
-      // Bank details
-      if (invoice.seller.bankName) {
-        y -= 10;
-        text('Bank Details:', 40, y, 9, true);
-        y -= 12;
-        text(`${invoice.seller.bankName} | A/c: ${invoice.seller.accountNumber} | IFSC: ${invoice.seller.ifsc}`, 40, y, 8);
-        if (invoice.seller.upiId) { y -= 12; text('UPI: ' + invoice.seller.upiId, 40, y, 8); }
-      }
-
-      // Footer
-      if (invoice.terms) {
-        y -= 20;
-        text('Terms & Conditions:', 40, y, 8, true);
-        y -= 12;
-        text(invoice.terms.slice(0, 120), 40, y, 8);
-      }
-
-      pdfDoc.getPages().forEach((outputPage, index) => outputPage.drawText(`Page ${index + 1} of ${pdfDoc.getPageCount()}`, { x: width / 2 - 22, y: 25, size: 7, font, color: rgb(0.6, 0.6, 0.6) }));
-
-      const out = await pdfDoc.save();
-      downloadBlob(new Blob([out], { type: 'application/pdf' }), `invoice-${invoice.invoiceNumber}.pdf`);
-      showToast('Invoice downloaded!', 'success');
-      await saveInvoice({ ...invoice, savedAt: Date.now() });
-    } catch (e) {
-      showToast('Error: ' + e.message, 'error');
+      const country = profile.country || (!profile.schemaVersion ? 'IN' : '');
+      const next = normalizeGstInvoice({ ...invoice, seller: { ...invoice.seller, ...profile, country }, taxName: '', placeOfSupply: '' });
+      if (!invoice.items.some(item => item.rate !== '' && Number(item.rate))) next.currency = countryCurrency(country);
+      if (country !== 'IN' && next.invoiceType === 'bill-of-supply') next.invoiceType = 'standard';
+      if (!next.buyer.country) next.buyer.country = country;
+      setInvoice(next); setFailure('');
     }
-    setProcessing(false);
+    catch (error) { showToast(error.message, 'error'); }
   };
-
-  return (
-    <ToolPage toolId="gst-invoice">
-      <Tabs
-        tabs={[
-          { key: 'seller', label: 'Seller' },
-          { key: 'buyer', label: 'Buyer' },
-          { key: 'invoice', label: 'Invoice' },
-          { key: 'items', label: 'Items' },
-          { key: 'other', label: 'Other' },
-          { key: 'summary', label: 'Summary' },
-        ]}
-        active={tab}
-        onChange={setTab}
-      />
-
-      {tab === 'seller' && (
-        <div className="tool-panel">
-          <div className="tool-panel-title">Seller / Your Business</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-            <FormGroup label="Trade / Brand Name"><input className="form-input" value={invoice.seller.tradeName} onChange={(e) => update('seller.tradeName', e.target.value)} /></FormGroup>
-            <FormGroup label="Legal Business Name"><input className="form-input" value={invoice.seller.legalName} onChange={(e) => update('seller.legalName', e.target.value)} /></FormGroup>
-            <FormGroup label="GSTIN"><input className="form-input" value={invoice.seller.gstin} onChange={(e) => update('seller.gstin', e.target.value)} placeholder="22AAAAA0000A1Z5" /></FormGroup>
-            <FormGroup label="PAN"><input className="form-input" value={invoice.seller.pan} onChange={(e) => update('seller.pan', e.target.value)} /></FormGroup>
-            <FormGroup label="Address" ><input className="form-input" value={invoice.seller.address} onChange={(e) => update('seller.address', e.target.value)} /></FormGroup>
-            <FormGroup label="City"><input className="form-input" value={invoice.seller.city} onChange={(e) => update('seller.city', e.target.value)} /></FormGroup>
-            <FormGroup label="State">
-              <select className="form-select" value={invoice.seller.state} onChange={(e) => update('seller.state', e.target.value)}>
-                {INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </FormGroup>
-            <FormGroup label="PIN Code"><input className="form-input" value={invoice.seller.pin} onChange={(e) => update('seller.pin', e.target.value)} /></FormGroup>
-            <FormGroup label="Phone"><input className="form-input" value={invoice.seller.phone} onChange={(e) => update('seller.phone', e.target.value)} /></FormGroup>
-            <FormGroup label="Email"><input className="form-input" value={invoice.seller.email} onChange={(e) => update('seller.email', e.target.value)} /></FormGroup>
-            <FormGroup label="Website"><input className="form-input" value={invoice.seller.website} onChange={(e) => update('seller.website', e.target.value)} /></FormGroup>
+  const seller = (field, label, props = {}) => <Field label={label} value={invoice.seller[field]} onChange={value => update(`seller.${field}`, value)} {...props} />;
+  const buyer = (field, label, props = {}) => <Field label={label} value={invoice.buyer[field]} onChange={value => update(`buyer.${field}`, value)} {...props} />;
+  const uploadSignature = file => action('Loading signature', async () => {
+    if (file.size > 3 * 1024 * 1024) throw new Error('Choose a signature image up to 3 MB.');
+    const image = await importSignatureImage(file, false);
+    // Normalize to a compact PNG before persisting it in JSON or local drafts.
+    const decoded = new Image(); decoded.src = image.dataUrl; await decoded.decode();
+    const canvas = document.createElement('canvas'), scale = Math.min(1, 1200 / decoded.naturalWidth, 500 / decoded.naturalHeight);
+    try {
+      canvas.width = Math.max(1, Math.round(decoded.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(decoded.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(decoded, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/png');
+      if (dataUrl.length > 3_000_000) throw new Error('The signature image is too large. Upload a smaller image.');
+      if (mounted.current) update('signature.image', dataUrl);
+    } finally { canvas.width = canvas.height = 0; }
+  });
+  const closePreview = useRef(() => setPreview(null)).current;
+  return <ToolPage toolId="gst-invoice"><div className="gst-workspace">
+    <form noValidate ref={editor} onSubmit={event => { event.preventDefault(); generate('download'); }}>
+      <fieldset disabled={Boolean(busy)} className="gst-editor-fieldset">
+        <div className="gst-topline"><div className="gst-meta-fields">
+          <Field label="Invoice number" value={invoice.invoiceNumber} maxLength={india && invoice.invoiceType !== 'standard' ? 16 : 40} onChange={value => update('invoiceNumber', value)} />
+          <Field label="Date" type="date" value={invoice.invoiceDate} onChange={value => update('invoiceDate', value)} />
+          <FormGroup label="Document"><select className="form-select" value={invoice.invoiceType} onChange={event => update('invoiceType', event.target.value)}><option value="standard">Invoice · no tax</option><option value="tax">{india ? 'Tax invoice · GST' : `Invoice with ${taxName}`}</option>{india && <option value="bill-of-supply">Bill of supply</option>}</select></FormGroup>
+          <FormGroup label="Currency"><select className="form-select" value={invoice.currency} onChange={event => update('currency', event.target.value)}>{INVOICE_CURRENCIES.map(currency => <option key={currency}>{currency}</option>)}</select></FormGroup>
+        </div><button type="button" className="btn btn-secondary btn-sm" onClick={() => { setInvoice(newGstInvoice(drafts, invoice.seller)); setSubmitted(false); setFailure(''); setCache(null); }}><FilePlus2 size={15} /> New invoice</button></div>
+        <div className="gst-layout"><div className="gst-main">
+          <div className="gst-parties">
+            <section className="gst-card"><div className="gst-card-heading"><h2>Your business</h2>{profiles.length > 0 && <select className="form-select gst-profile-select" aria-label="Use saved business profile" value="" onChange={event => useProfile(event.target.value)}><option value="">Use saved business</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select>}</div>
+              {seller('legalName', 'Business name', { autoComplete: 'organization' })}
+              <CountryField label="Business country" value={invoice.seller.country} onChange={value => chooseCountry('seller', value)} />
+              {seller('address', 'Business address', { multiline: true, placeholder: 'Street, city / region and postal code', autoComplete: 'street-address' })}
+              {seller(india ? 'gstin' : 'taxId', countryTax(invoice.seller.country).idLabel, { maxLength: india ? 15 : 64, autoComplete: 'off', spellCheck: false, placeholder: india && invoice.invoiceType !== 'standard' ? '15-character GSTIN' : 'If registered' })}
+              {india && invoice.seller.state && <div className="gst-detected-region">State from GSTIN: {invoice.seller.state}</div>}
+              <details className="gst-details"><summary>Contact & payment details</summary><div className="gst-fields">{seller('phone', 'Phone', { type: 'tel' })}{seller('email', 'Email', { type: 'email' })}{seller('tradeName', 'Trade name')}{seller('website', 'Website')}{seller('city', 'City')}{!india && seller('state', 'State / province / region')}{seller('pin', india ? 'PIN code' : 'Postal / ZIP code', { maxLength: 20 })}{seller('bankName', 'Bank')}{seller('accountNumber', india ? 'Account number' : 'Account number / IBAN')}{india ? <>{seller('ifsc', 'IFSC')}{seller('upiId', 'UPI ID')}</> : seller('bankCode', 'Routing / SWIFT / bank code')}</div></details>
+              <button type="button" className="btn btn-secondary btn-sm gst-save-business" onClick={saveBusiness}><Save size={13} /> Save business</button>
+            </section>
+            <section className="gst-card"><div className="gst-card-heading"><h2>Bill to</h2><span>Tax ID only if registered</span></div>
+              {buyer('name', 'Customer name', { autoComplete: 'name', placeholder: 'Customer or business name' })}
+              <CountryField label="Customer country" value={invoice.buyer.country} onChange={value => chooseCountry('buyer', value)} />
+              {buyer('billingAddress', 'Billing address', { multiline: true, placeholder: 'Street, city / region and postal code' })}
+              {buyer(invoice.buyer.country === 'IN' ? 'gstin' : 'taxId', `Customer ${countryTax(invoice.buyer.country).idLabel}`, { maxLength: invoice.buyer.country === 'IN' ? 15 : 64, autoComplete: 'off', spellCheck: false, placeholder: 'Optional' })}
+              {isDomesticIndia(invoice) && !billOfSupply && <StateField label="Place of supply (GST state)" value={supplyState(invoice)} onChange={value => update('placeOfSupply', value)} />}
+              <details className="gst-details"><summary>Contact & delivery details</summary><div className="gst-fields">{buyer('phone', 'Phone', { type: 'tel' })}{buyer('email', 'Email', { type: 'email' })}{invoice.buyer.country === 'IN' ? <StateField label="Billing state" value={invoice.buyer.state} onChange={value => update('buyer.state', value)} /> : buyer('state', 'State / province / region')}{buyer('pin', invoice.buyer.country === 'IN' ? 'PIN code' : 'Postal / ZIP code', { maxLength: 20 })}{invoice.buyer.businessName && invoice.buyer.businessName !== invoice.buyer.name && buyer('businessName', 'Company name')}</div>{buyer('shippingAddress', 'Delivery address (if different)', { multiline: true })}</details>
+            </section>
           </div>
-          <div className="action-row"><button className="btn btn-secondary" onClick={saveBusinessProfile}><Save size={15} /> Save business profile</button>{profiles.map((profile) => <button className="btn btn-secondary" key={profile.id} onClick={() => setInvoice((current) => ({ ...current, seller: { ...current.seller, ...profile } }))}>{profile.name}</button>)}</div>
-          <hr className="divider" />
-          <div className="tool-panel-title">Bank Details</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
-            <FormGroup label="Bank Name"><input className="form-input" value={invoice.seller.bankName} onChange={(e) => update('seller.bankName', e.target.value)} /></FormGroup>
-            <FormGroup label="Account Number"><input className="form-input" value={invoice.seller.accountNumber} onChange={(e) => update('seller.accountNumber', e.target.value)} /></FormGroup>
-            <FormGroup label="IFSC Code"><input className="form-input" value={invoice.seller.ifsc} onChange={(e) => update('seller.ifsc', e.target.value)} /></FormGroup>
-            <FormGroup label="UPI ID"><input className="form-input" value={invoice.seller.upiId} onChange={(e) => update('seller.upiId', e.target.value)} /></FormGroup>
-          </div>
-        </div>
-      )}
-
-      {tab === 'buyer' && (
-        <div className="tool-panel">
-          <div className="tool-panel-title">Buyer / Customer Details</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-            <FormGroup label="Customer Name"><input className="form-input" value={invoice.buyer.name} onChange={(e) => update('buyer.name', e.target.value)} /></FormGroup>
-            <FormGroup label="Business Name"><input className="form-input" value={invoice.buyer.businessName} onChange={(e) => update('buyer.businessName', e.target.value)} /></FormGroup>
-            <FormGroup label="GSTIN (if applicable)"><input className="form-input" value={invoice.buyer.gstin} onChange={(e) => update('buyer.gstin', e.target.value)} /></FormGroup>
-            <FormGroup label="Billing Address"><input className="form-input" value={invoice.buyer.billingAddress} onChange={(e) => update('buyer.billingAddress', e.target.value)} /></FormGroup>
-            <FormGroup label="Shipping Address"><input className="form-input" value={invoice.buyer.shippingAddress} onChange={(e) => update('buyer.shippingAddress', e.target.value)} /></FormGroup>
-            <FormGroup label="State">
-              <select className="form-select" value={invoice.buyer.state} onChange={(e) => update('buyer.state', e.target.value)}>
-                <option value="">Select state</option>
-                {INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </FormGroup>
-            <FormGroup label="Phone"><input className="form-input" value={invoice.buyer.phone} onChange={(e) => update('buyer.phone', e.target.value)} /></FormGroup>
-            <FormGroup label="Email"><input className="form-input" value={invoice.buyer.email} onChange={(e) => update('buyer.email', e.target.value)} /></FormGroup>
-          </div>
-        </div>
-      )}
-
-      {tab === 'invoice' && (
-        <div className="tool-panel">
-          <div className="tool-panel-title">Invoice Details</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
-            <FormGroup label="Invoice Type">
-              <select className="form-select" value={invoice.invoiceType} onChange={(e) => update('invoiceType', e.target.value)}>
-                <option value="tax">Tax Invoice</option>
-                <option value="bill-of-supply">Bill of Supply</option>
-              </select>
-            </FormGroup>
-            <FormGroup label="Invoice Number"><input className="form-input" value={invoice.invoiceNumber} onChange={(e) => update('invoiceNumber', e.target.value)} /></FormGroup>
-            <FormGroup label="Invoice Date"><input className="form-input" type="date" value={invoice.invoiceDate} onChange={(e) => update('invoiceDate', e.target.value)} /></FormGroup>
-            <FormGroup label="Due Date"><input className="form-input" type="date" value={invoice.dueDate} onChange={(e) => update('dueDate', e.target.value)} /></FormGroup>
-            <FormGroup label="Place of Supply">
-              <select className="form-select" value={invoice.placeOfSupply} onChange={(e) => update('placeOfSupply', e.target.value)}>
-                {INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </FormGroup>
-            <FormGroup label="Currency">
-              <select className="form-select" value={invoice.currency} onChange={(e) => update('currency', e.target.value)}>
-                <option value="INR">INR (₹)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-              </select>
-            </FormGroup>
-            <FormGroup label="Payment terms"><input className="form-input" value={invoice.paymentTerms} onChange={(event) => update('paymentTerms', event.target.value)} /></FormGroup>
-            <label className="check-row"><input type="checkbox" checked={invoice.reverseCharge} onChange={(event) => update('reverseCharge', event.target.checked)} /> Reverse charge applicable</label>
-          </div>
-          <FormGroup label="Notes"><textarea className="form-textarea" value={invoice.notes} onChange={(e) => update('notes', e.target.value)} style={{ minHeight: 80 }} /></FormGroup>
-          <FormGroup label="Terms & Conditions"><textarea className="form-textarea" value={invoice.terms} onChange={(e) => update('terms', e.target.value)} style={{ minHeight: 60 }} /></FormGroup>
-        </div>
-      )}
-
-      {tab === 'items' && (
-        <div className="tool-panel">
-          <div className="tool-panel-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Invoice Items</span>
-            <button className="btn btn-sm btn-primary" onClick={addItem}><Plus size={13} /> Add Item</button>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
-              <thead>
-                <tr style={{ background: 'var(--bg-surface-2)' }}>
-                  {['Item Name', 'HSN/SAC', 'Qty', 'Unit', 'Rate', 'Disc%', 'GST%', 'Taxable', 'Total', ''].map((h) => (
-                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-muted)', fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.items.map((item, itemIndex) => {
-                  const c = calcItem(item, invoice.seller.state, invoice.placeOfSupply, invoice.invoiceType);
-                  return (
-                    <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '6px 8px' }}><input className="form-input" value={item.name} onChange={(e) => updateItem(item.id, 'name', e.target.value)} style={{ minWidth: 120 }} /><input className="form-input" value={item.description} onChange={(e) => updateItem(item.id, 'description', e.target.value)} placeholder="Description" style={{ minWidth: 120, marginTop: 4 }} /></td>
-                      <td style={{ padding: '6px 8px' }}><input className="form-input" value={item.hsn} onChange={(e) => updateItem(item.id, 'hsn', e.target.value)} style={{ width: 80 }} /></td>
-                      <td style={{ padding: '6px 8px' }}><input className="form-input" type="number" value={item.qty} onChange={(e) => updateItem(item.id, 'qty', +e.target.value)} style={{ width: 60 }} /></td>
-                      <td style={{ padding: '6px 8px' }}><input className="form-input" value={item.unit} onChange={(e) => updateItem(item.id, 'unit', e.target.value)} style={{ width: 60 }} /></td>
-                      <td style={{ padding: '6px 8px' }}><input className="form-input" type="number" value={item.rate} onChange={(e) => updateItem(item.id, 'rate', +e.target.value)} style={{ width: 80 }} /></td>
-                      <td style={{ padding: '6px 8px' }}><input className="form-input" type="number" value={item.discount} onChange={(e) => updateItem(item.id, 'discount', +e.target.value)} style={{ width: 60 }} /></td>
-                      <td style={{ padding: '6px 8px' }}>
-                        <select className="form-select" value={item.gstRate} onChange={(e) => updateItem(item.id, 'gstRate', +e.target.value)} style={{ width: 70 }}>
-                          {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: '6px 8px', color: 'var(--text-muted)', fontSize: 12 }}>₹{c.taxable.toFixed(2)}</td>
-                      <td style={{ padding: '6px 8px', fontWeight: 600 }}>₹{c.total.toFixed(2)}</td>
-                      <td style={{ padding: '6px 8px' }}>
-                        <button className="icon-btn" disabled={itemIndex === 0} onClick={() => moveItem(itemIndex, -1)}><ArrowUp size={12} /></button><button className="icon-btn" disabled={itemIndex === invoice.items.length - 1} onClick={() => moveItem(itemIndex, 1)}><ArrowDown size={12} /></button>
-                        <button className="btn btn-sm btn-danger btn-icon" onClick={() => removeItem(item.id)}><X size={12} /></button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {tab === 'other' && <div className="tool-panel"><div className="tool-panel-title">Other details & portability</div><FormGroup label="Notes"><textarea className="form-textarea" value={invoice.notes} onChange={(event) => update('notes', event.target.value)} /></FormGroup><FormGroup label="Terms & conditions"><textarea className="form-textarea" value={invoice.terms} onChange={(event) => update('terms', event.target.value)} /></FormGroup><div className="action-row"><button className="btn btn-secondary" onClick={exportData}><Download size={15} /> Export JSON</button><label className="btn btn-secondary"><Upload size={15} /> Import JSON<input hidden type="file" accept="application/json,.json" onChange={(event) => event.target.files[0] && importData(event.target.files[0])} /></label></div></div>}
-
-      {tab === 'summary' && (
-        <div className="tool-panel">
-          <div className="tool-panel-title">Invoice Summary</div>
-          <div style={{ maxWidth: 400, marginLeft: 'auto' }}>
-            {[
-              ['Taxable Amount', totals.taxable],
-              ...(totals.cgst > 0 ? [['CGST', totals.cgst], ['SGST', totals.sgst]] : []),
-              ...(totals.igst > 0 ? [['IGST', totals.igst]] : []),
-            ].map(([label, val]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 'var(--font-size-sm)' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
-                <span>{invoice.currency} {val.toFixed(2)}</span>
+          <section className="gst-card gst-items"><div className="gst-card-heading"><h2>Items & services</h2><span>Prices before tax</span></div>
+            <datalist id="invoice-gst-rates">{[0, .1, .25, 1.5, 3, 5, 6, 12, 18, 28, 40].map(rate => <option key={rate} value={rate} />)}</datalist>
+            <div className={`gst-item-labels${billOfSupply ? ' gst-no-tax' : ''}`}><span>Item / service</span><span>{india ? 'HSN/SAC' : 'Item code'}</span><span>Qty</span><span>Rate ({invoice.currency})</span>{!billOfSupply && <span>{taxName} %</span>}<span>Amount</span><span /></div>
+            {invoice.items.map((item, index) => <div className={`gst-item${billOfSupply ? ' gst-no-tax' : ''}`} key={item.id}>
+              <div className="gst-item-line">
+                <ItemInput label="Item / service" aria-label={`Item ${index + 1} name`} value={item.name} placeholder="Item or service" onChange={event => itemUpdate(item.id, 'name', event.target.value)} />
+                <ItemInput label={india ? 'HSN/SAC' : 'Item code'} aria-label={`Item ${index + 1} ${india ? 'HSN or SAC' : 'code'}`} inputMode={india ? 'numeric' : 'text'} maxLength={india ? 8 : 30} value={item.hsn} placeholder="Code" onChange={event => itemUpdate(item.id, 'hsn', event.target.value)} />
+                <ItemInput label="Qty" aria-label={`Item ${index + 1} quantity`} type="number" min="0.001" step="any" value={item.qty} onChange={event => itemUpdate(item.id, 'qty', event.target.value)} />
+                <ItemInput label={`Rate (${invoice.currency})`} aria-label={`Item ${index + 1} unit price in ${invoice.currency}`} type="number" min="0" step="any" value={item.rate} placeholder="0" onChange={event => itemUpdate(item.id, 'rate', event.target.value)} />
+                {!billOfSupply && <ItemInput label={`${taxName} %`} aria-label={`Item ${index + 1} ${taxName} percentage`} type="number" list={india ? 'invoice-gst-rates' : undefined} min="0" max="100" step="any" value={item.gstRate} onChange={event => itemUpdate(item.id, 'gstRate', event.target.value)} />}
+                <output className="gst-item-amount" aria-label={`Item ${index + 1} amount`}>{fmt(gstLine(item, invoice).total)}</output>
+                <button type="button" className="icon-btn" disabled={invoice.items.length === 1} aria-label={`Remove item ${index + 1}`} onClick={() => setInvoice(current => ({ ...current, items: current.items.filter(row => row.id !== item.id) }))}><Trash2 size={15} /></button>
               </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', fontWeight: 700, fontSize: 'var(--font-size-lg)' }}>
-              <span>Grand Total</span>
-              <span style={{ color: 'var(--primary)' }}>{invoice.currency} {totals.total.toFixed(2)}</span>
-            </div>
-          </div>
-          <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg-surface-2)', borderRadius: 8, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-            <strong>Tax treatment:</strong> {invoice.invoiceType === 'bill-of-supply' ? 'Bill of supply — no GST charged' : invoice.seller.state === invoice.placeOfSupply ? 'Intra-state supply — CGST + SGST applicable' : 'Inter-state supply — IGST applicable'}
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
-        <button className="btn btn-primary btn-lg" onClick={handleDownload} disabled={processing}>
-          <Download size={18} /> {processing ? 'Generating…' : 'Download PDF Invoice'}
-        </button>
-        <button className="btn btn-secondary" onClick={handleSave}><Eye size={16} /> Save Draft</button>
-        <button className="btn btn-secondary" onClick={() => window.print()}><Printer size={16} /> Print</button>
-        <button className="btn btn-secondary" onClick={() => setInvoice(emptyInvoice())}><X size={16} /> New Invoice</button>
-      </div>
-      {drafts.length > 0 && <div className="tool-panel"><div className="tool-panel-title">Saved invoice history</div>{drafts.map((draft) => <div className="saved-workflow" key={draft.id}><button className="btn btn-secondary" onClick={() => setInvoice(draft)}>{draft.invoiceNumber} · {draft.buyer?.name || 'Customer'}</button><span>{draft.currency} {draft.items?.reduce((sum, item) => sum + calcItem(item, draft.seller.state, draft.placeOfSupply, draft.invoiceType).total, 0).toFixed(2)}</span><button className="icon-btn" onClick={async () => { await deleteInvoice(draft.id); refreshSaved() }}><X size={14} /></button></div>)}</div>}
-      <div style={{ marginTop: 12, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-        This tool generates invoice documents. Always verify tax calculations with a qualified CA for compliance purposes.
-      </div>
-    </ToolPage>
-  );
+              <details className="gst-item-options"><summary>Item details{Number(item.discount) ? ` · ${item.discount}% discount` : ''}{india && Number(item.cessRate) && !billOfSupply ? ` · ${item.cessRate}% cess` : ''}</summary><div className="gst-fields gst-item-extra"><Field label="Description" multiline value={item.description} onChange={value => itemUpdate(item.id, 'description', value)} /><div className="gst-fields"><Field label="Unit" value={item.unit} onChange={value => itemUpdate(item.id, 'unit', value)} /><Field label="Discount %" type="number" min="0" max="100" step="any" value={item.discount} onChange={value => itemUpdate(item.id, 'discount', value)} />{india && !billOfSupply && <Field label="Cess %" type="number" min="0" max="100" step="any" value={item.cessRate} onChange={value => itemUpdate(item.id, 'cessRate', value)} />}</div></div><div className="gst-item-move"><button type="button" className="btn btn-secondary btn-sm" disabled={!index} onClick={() => moveItem(index, -1)} aria-label={`Move item ${index + 1} up`}><ArrowUp size={13} /> Move up</button><button type="button" className="btn btn-secondary btn-sm" disabled={index === invoice.items.length - 1} onClick={() => moveItem(index, 1)} aria-label={`Move item ${index + 1} down`}><ArrowDown size={13} /> Move down</button></div></details>
+            </div>)}
+            <button type="button" className="btn btn-secondary btn-sm gst-add-item" disabled={invoice.items.length >= 500} onClick={() => setInvoice(current => ({ ...current, items: [...current.items, newInvoiceItem(current.seller.country)] }))}><Plus size={15} /> Add item</button>
+          </section>
+          <details className="gst-card gst-details gst-signature"><summary>Signature <span>{invoice.signature.mode === 'type' && invoice.signature.text.trim() ? 'Typed signature added' : invoice.signature.mode === 'image' && invoice.signature.image ? 'Image signature added' : 'Optional · type or upload'}</span></summary>
+            <div className="gst-signature-modes" role="group" aria-label="Invoice signature type">{[['none', 'None'], ['type', 'Type name'], ['image', 'Upload image']].map(([mode, label]) => <button type="button" key={mode} className="btn btn-secondary btn-sm" aria-pressed={invoice.signature.mode === mode} onClick={() => update('signature.mode', mode)}>{label}</button>)}</div>
+            {invoice.signature.mode === 'type' && <><Field label="Signature name" value={invoice.signature.text} maxLength={100} onChange={value => update('signature.text', value)} placeholder="Type your name" /><div className="gst-signature-size"><label>Signature size<input type="range" min="20" max="200" step="5" value={Number(invoice.signature.size) || 100} onChange={event => update('signature.size', Number(event.target.value))} /></label><Field label="Size (%)" type="number" min="20" max="200" step="1" value={invoice.signature.size ?? 100} onChange={value => update('signature.size', value)} /></div><div className="gst-typed-signature" style={{ fontSize: `${32 * Math.max(20, Math.min(200, Number(invoice.signature.size) || 100)) / 100}px` }} aria-label="Typed signature preview">{invoice.signature.text}</div></>}
+            {invoice.signature.mode === 'image' && <><label className="btn btn-secondary btn-sm"><Upload size={14} /> Choose signature<input type="file" hidden accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" onChange={event => { const file = event.target.files[0]; event.target.value = ''; if (file) uploadSignature(file); }} /></label>{invoice.signature.image && <div className="gst-signature-image"><img src={invoice.signature.image} alt="Signature to include on invoice" /><button type="button" className="icon-btn" aria-label="Remove invoice signature" onClick={() => { update('signature.image', ''); update('signature.mode', 'none'); }}><X size={16} /></button></div>}</>}
+          </details>
+          <details className="gst-card gst-details gst-more"><summary>More options <span>Due date, notes & tax settings</span></summary><div className="gst-fields">
+            <Field label="Due date" type="date" min={invoice.invoiceDate} value={invoice.dueDate} onChange={value => update('dueDate', value)} />
+            <Field label="Supply / service date" type="date" value={invoice.supplyDate} onChange={value => update('supplyDate', value)} />
+            <Field label="Payment terms" value={invoice.paymentTerms} placeholder="Optional" onChange={value => update('paymentTerms', value)} />
+            {!india && !billOfSupply && <Field label="Tax name" value={invoice.taxName} maxLength={24} placeholder={countryTax(invoice.seller.country).name} onChange={value => update('taxName', value)} />}
+            {!billOfSupply && <label className="gst-check"><input type="checkbox" checked={invoice.reverseCharge} onChange={event => update('reverseCharge', event.target.checked)} /> Reverse charge: recipient pays tax</label>}
+          </div>{!india && !billOfSupply && <div className="gst-additional-taxes"><strong>Additional taxes</strong>{invoice.additionalTaxes.map(tax => <div className="gst-additional-tax" key={tax.id}><Field label="Tax name" value={tax.name} maxLength={30} placeholder="e.g. PST" onChange={value => update('additionalTaxes', invoice.additionalTaxes.map(row => row.id === tax.id ? { ...row, name: value } : row))} /><Field label="Rate %" type="number" min="0" max="100" step="any" value={tax.rate} onChange={value => update('additionalTaxes', invoice.additionalTaxes.map(row => row.id === tax.id ? { ...row, rate: value } : row))} /><button type="button" className="icon-btn" aria-label={`Remove ${tax.name || 'additional tax'}`} onClick={() => update('additionalTaxes', invoice.additionalTaxes.filter(row => row.id !== tax.id))}><X size={14} /></button></div>)}<button type="button" className="btn btn-secondary btn-sm" disabled={invoice.additionalTaxes.length >= 5} onClick={() => update('additionalTaxes', [...invoice.additionalTaxes, { id: crypto.randomUUID(), name: '', rate: '' }])}><Plus size={13} /> Add tax</button><p>Each additional rate applies to the discounted item value. Enter the rates applicable to this sale.</p></div>}<Field label="Notes" multiline value={invoice.notes} onChange={value => update('notes', value)} /><Field label="Terms & conditions" multiline value={invoice.terms} onChange={value => update('terms', value)} /></details>
+        </div><aside className="gst-summary gst-card"><h2>Invoice total</h2><div className="gst-summary-row"><span>Subtotal</span><span>{fmt(totals.gross)}</span></div>
+          {totals.discount > 0 && <div className="gst-summary-row"><span>Discount</span><span>−{fmt(totals.discount)}</span></div>}
+          {totals.discount > 0 && <div className="gst-summary-row"><span>{billOfSupply ? 'Net amount' : 'Taxable value'}</span><span>{fmt(totals.taxable)}</span></div>}
+          {!billOfSupply && <>{!india ? <><div className="gst-summary-row"><span>{taxName}</span><span>{fmt(totals.localTax)}</span></div>{additionalTaxTotals(invoice).map(tax => <div key={tax.id} className="gst-summary-row"><span>{tax.name || 'Additional tax'}</span><span>{fmt(tax.amount)}</span></div>)}</> : intra ? <><div className="gst-summary-row"><span>CGST</span><span>{fmt(totals.cgst)}</span></div><div className="gst-summary-row"><span>{taxLabel(invoice)}</span><span>{fmt(totals.sgst)}</span></div></> : <div className="gst-summary-row"><span>IGST</span><span>{fmt(totals.igst)}</span></div>}{totals.cess > 0 && <div className="gst-summary-row"><span>Cess</span><span>{fmt(totals.cess)}</span></div>}</>}
+          <div className="gst-grand-total"><span>Amount due</span><strong>{fmt(totals.total)}</strong></div>
+          <p className="gst-tax-treatment">{billOfSupply ? 'Tax not charged' : invoice.reverseCharge ? `Reverse charge · ${fmt(totals.tax)} tax payable by recipient` : !india ? `${taxName} · rates entered per item` : !invoice.seller.state ? 'Enter GSTIN to determine the business state' : intra ? `Same-state supply · CGST + ${taxLabel(invoice)}` : 'Inter-state / overseas supply · IGST'}</p>
+          <button type="submit" className="btn btn-primary"><Download size={16} /> {busy === 'Creating PDF' ? 'Creating PDF…' : 'Download invoice'}</button>
+          <div className="gst-summary-actions"><button type="button" className="btn btn-secondary" onClick={() => generate('preview')}><Eye size={15} /> Preview</button><button type="button" className="btn btn-secondary" onClick={saveDraft}><Save size={15} /> Save draft</button></div>
+        </aside></div>
+      </fieldset>
+      {(errors.length > 0 || failure) && <div ref={errorsRef} tabIndex={-1} className="gst-errors" role="alert">{failure && <p>{failure}</p>}{errors.length > 0 && <><strong>Check these details</strong><ul>{errors.slice(0, 8).map((error, index) => <li key={index}>{error}</li>)}</ul>{errors.length > 8 && <span>And {errors.length - 8} more item details.</span>}</>}</div>}
+    </form>
+    <details className="gst-card gst-details gst-history"><summary>Saved drafts & invoice data <span>{drafts.length} saved</span></summary>
+      <div className="gst-data-actions"><button className="btn btn-secondary btn-sm" disabled={Boolean(busy)} onClick={() => generate('export')}><Download size={14} /> Export editable PDF</button><label className={`btn btn-secondary btn-sm${busy ? ' disabled' : ''}`}><Upload size={14} /> Import PDF<input type="file" hidden disabled={Boolean(busy)} accept=".pdf,application/pdf" onChange={event => { const file = event.target.files[0]; event.target.value = ''; if (file) importData(file); }} /></label></div><p className="gst-pdf-import-hint">Reopen PDFs saved with Export editable PDF to restore all invoice fields.</p>
+      <div className="gst-draft-list">{drafts.map(draft => <div key={draft.id}><button className="gst-draft-open" disabled={Boolean(busy)} onClick={() => { try { load(draft); editor.current?.scrollIntoView({ behavior: 'smooth' }); } catch (error) { showToast(error.message, 'error'); } }}><strong>{draft.invoiceNumber}</strong><span>{draft.buyer?.name || draft.buyer?.businessName || 'Draft'} · {draft.invoiceDate}</span></button><button className="icon-btn" disabled={Boolean(busy)} aria-label={`Delete saved invoice ${draft.invoiceNumber}`} onClick={() => action('Deleting draft', async () => { await deleteInvoice(draft.id); await refreshDrafts(); })}><Trash2 size={15} /></button></div>)}</div>
+    </details>
+    {preview && <PdfReview blob={preview} onClose={closePreview} onDownload={() => generate('download')} />}
+  </div></ToolPage>;
 }

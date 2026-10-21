@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, Search, Star, Sun, Moon, Download, Settings, Clock, Trash2, X, ArrowUpRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { TOOLS, searchTools } from '../data/tools';
+import { VISIBLE_TOOLS as TOOLS, searchTools } from '../data/tools';
 import { clearRecentFiles } from '../services/storage';
 import createPdfLogo from '../assets/createpdf.png';
 
@@ -55,7 +55,7 @@ export function SearchModal() {
     }
   }, [searchOpen]);
 
-  const results = query.trim() ? searchTools(query) : TOOLS.slice(0, 10);
+  const results = query.trim() ? searchTools(query).filter(tool => !tool.hidden) : TOOLS.slice(0, 10);
 
   useEffect(() => {
     const handler = (e) => {

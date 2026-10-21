@@ -8,7 +8,7 @@ import {
   Presentation, Globe, FilePlus, AlignJustify, User, Table, BookMarked,
   Image, FileType, Tags, Lock, Unlock, Eye, Zap,
   Share2, Pencil, Receipt, BarChart3, Blend, SplitSquareHorizontal,
-  HardDrive, Languages, MessageSquare, NotebookPen, Contact
+  HardDrive, Languages, MessageSquare, NotebookPen, Contact, Wrench
 } from 'lucide-react';
 
 export const TOOL_CATEGORIES = {
@@ -80,6 +80,17 @@ export const TOOLS = [
     icon: Minimize2,
     route: '/compress-pdf',
     keywords: ['compress', 'reduce', 'optimize', 'size', 'smaller'],
+    accepts: ['application/pdf'],
+  },
+  {
+    id: 'repair-pdf',
+    name: 'Repair PDF',
+    category: TOOL_CATEGORIES.PAGE_MANAGEMENT,
+    catKey: 'page',
+    description: 'Repair damaged PDF structure or recover readable pages',
+    icon: Wrench,
+    route: '/repair-pdf',
+    keywords: ['repair', 'recover', 'corrupt', 'damaged', 'broken', 'fix', 'restore'],
     accepts: ['application/pdf'],
   },
   {
@@ -210,10 +221,10 @@ export const TOOLS = [
     name: 'Edit PDF & Add Text',
     category: TOOL_CATEGORIES.EDIT_ANNOTATE,
     catKey: 'edit',
-    description: 'Add text, shapes and annotations to PDF pages',
+    description: 'Edit text and add images, highlights and shapes to PDF pages',
     icon: Edit3,
     route: '/edit-pdf',
-    keywords: ['edit', 'text', 'annotate', 'add', 'write'],
+    keywords: ['edit', 'text', 'annotate', 'add', 'write', 'images', 'highlight', 'shapes'],
     accepts: ['application/pdf'],
   },
   {
@@ -586,7 +597,7 @@ export const TOOLS = [
     name: 'Encrypt PDF',
     category: TOOL_CATEGORIES.SECURITY,
     catKey: 'security',
-    description: 'Password-protect PDF files with AES encryption',
+    description: 'Password-protect PDF files with 128-bit RC4 encryption',
     icon: Lock,
     route: '/encrypt-pdf',
     keywords: ['encrypt', 'password', 'protect', 'security', 'lock'],
@@ -608,7 +619,7 @@ export const TOOLS = [
     name: 'Unlock PDF',
     category: TOOL_CATEGORIES.SECURITY,
     catKey: 'security',
-    description: 'Remove print/copy restrictions from authorized PDFs',
+    description: 'Create an unprotected, printable copy of a PDF',
     icon: Shield,
     route: '/unlock-pdf',
     keywords: ['unlock', 'restrictions', 'permissions', 'security'],
@@ -619,7 +630,7 @@ export const TOOLS = [
     name: 'Auto-Redact PII',
     category: TOOL_CATEGORIES.SECURITY,
     catKey: 'security',
-    description: 'Detect and redact email, phone and ID number patterns',
+    description: 'Detect and redact email addresses, phone numbers and PAN patterns',
     icon: Eye,
     route: '/auto-redact',
     keywords: ['redact', 'pii', 'privacy', 'personal data', 'email', 'phone'],
@@ -651,13 +662,13 @@ export const TOOLS = [
   // === BUSINESS ===
   {
     id: 'gst-invoice',
-    name: 'GST Invoice Generator',
+    name: 'Invoice Generator',
     category: TOOL_CATEGORIES.BUSINESS,
     catKey: 'business',
-    description: 'Create GST-compliant tax invoices and bills of supply',
+    description: 'Create invoices with global currencies, flexible taxes and optional signatures',
     icon: Receipt,
     route: '/gst-invoice',
-    keywords: ['gst', 'invoice', 'tax', 'business', 'india', 'cgst', 'igst'],
+    keywords: ['invoice', 'gst', 'vat', 'sales tax', 'business', 'international', 'currency', 'signature', 'cgst', 'igst'],
     accepts: [],
   },
   {
@@ -665,7 +676,7 @@ export const TOOLS = [
     name: 'POS Bill Generator',
     category: TOOL_CATEGORIES.BUSINESS,
     catKey: 'business',
-    description: 'In-browser point-of-sale billing with product catalogue',
+    description: 'Create retail receipts with quick items, a product catalogue and your chosen currency',
     icon: BarChart3,
     route: '/pos-billing',
     keywords: ['pos', 'billing', 'retail', 'shop', 'receipt', 'bill'],
@@ -675,7 +686,7 @@ export const TOOLS = [
   {
     id: 'invoice-extractor', name: 'Purchase Bill / Invoice Extractor',
     category: TOOL_CATEGORIES.BUSINESS, catKey: 'business',
-    description: 'Extract and review bill details, line items and GST; export CSV or JSON',
+    description: 'Extract and review bill details, item prices, discounts and tax; export a PDF report',
     icon: Receipt, route: '/invoice-extractor',
     keywords: ['purchase', 'bill', 'invoice', 'extract', 'gst', 'cgst', 'sgst', 'igst', 'ocr', 'receipt'], accepts: ['application/pdf', 'image/*'],
   },
@@ -684,6 +695,7 @@ export const TOOLS = [
   {
     id: 'p2p-share',
     name: 'P2P File Share',
+    hidden: true,
     category: TOOL_CATEGORIES.COLLABORATE,
     catKey: 'collab',
     description: 'Send files directly to another device using WebRTC',
@@ -729,6 +741,8 @@ export const TOOLS = [
 ];
 
 export const TOOL_MAP = Object.fromEntries(TOOLS.map((t) => [t.id, t]));
+// UI listings omit hidden tools; routes and implementations use the full registry.
+export const VISIBLE_TOOLS = TOOLS.filter((tool) => !tool.hidden);
 
 export function searchTools(query) {
   if (!query) return TOOLS;

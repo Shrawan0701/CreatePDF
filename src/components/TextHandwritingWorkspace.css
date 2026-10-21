@@ -1,0 +1,18 @@
+.text-handwriting-workspace { min-width: 0; }
+.text-hand-grid { display: grid; grid-template-columns: minmax(340px, .9fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
+.text-hand-controls { display: grid; gap: 14px; min-width: 0; }
+.text-hand-controls .tool-panel { margin: 0; padding: 20px; }
+.text-hand-editor-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+.text-hand-editor-toolbar h2 { font-size: 14px; font-weight: 600; margin: 0 auto 0 0; }
+.text-hand-editor-toolbar .btn { font-size: 11px; }
+.text-hand-editor textarea { display: block; width: 100%; min-height: 190px; height: 26vh; max-height: 65vh; resize: vertical; font: 14px/1.65 var(--font-sans); tab-size: 4; }
+.text-hand-counts { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 9px; color: var(--text-muted); font-size: 11px; }
+.text-hand-counts button { color: var(--primary); background: transparent; cursor: pointer; font-size: inherit; }
+.text-handwriting-workspace .hand-ink > .text-hand-reset { display: flex; align-items: center; gap: 5px; width: auto; height: auto; border: 0; border-radius: 0; margin-left: auto; padding: 3px; background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; }
+.text-hand-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.text-hand-actions > button { flex: 1; min-height: 42px; white-space: nowrap; }
+.text-hand-review { position: sticky; top: 95px; }
+.text-hand-review .hand-preview-viewport { height: min(76vh, 960px); }
+.text-hand-review .hand-preview-source { display: none; }
+@media (max-width: 1000px) { .text-hand-grid { grid-template-columns: minmax(300px, 1fr) minmax(0, 1fr); gap: 12px; }.text-hand-controls .tool-panel { padding: 16px; }.text-hand-actions > button { font-size: 12px; } }
+@media (max-width: 720px) { .text-hand-grid { grid-template-columns: minmax(0, 1fr); }.text-hand-review { position: static; }.text-hand-editor textarea { height: 210px; }.text-hand-review .hand-preview-viewport { height: 65vh; } }

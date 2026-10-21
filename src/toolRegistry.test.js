@@ -3,8 +3,8 @@ import { IMPLEMENTED_TOOLS } from './App'
 import { TOOLS } from './data/tools'
 
 describe('tool registry', () => {
-  it('contains all 64 unique tools and routes', () => {
-    expect(TOOLS).toHaveLength(64)
+  it('contains all 65 unique tools and routes', () => {
+    expect(TOOLS).toHaveLength(65)
     expect(new Set(TOOLS.map((tool) => tool.id)).size).toBe(TOOLS.length)
     expect(new Set(TOOLS.map((tool) => tool.route)).size).toBe(TOOLS.length)
   })

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { Download, FileText, Languages, Send, Trash2, Plus } from 'lucide-react';
+import { Download, FileText, Languages, Send } from 'lucide-react';
 import { ToolPage } from '../../components/ToolPage';
 import { DropZone, FileItem, downloadBlob } from '../../components/ui';
 import { readDocument, OCR_LANGUAGES, splitText } from '../../services/documentText';
@@ -8,7 +8,7 @@ import { callAi, TRANSLATION_LANGUAGES, REPLY_LANGUAGES, SUMMARY_LANGUAGES } fro
 import { answerDocument, summarizeDocument } from '../../services/documentAi';
 import { richHtmlToPdf, sanitizeDocumentHtml } from '../../services/richPdf';
 import { translatedLayoutPdf, translationRegions } from '../../services/translatedPdf';
-import { extractInvoiceLocally, normalizeInvoice, INVOICE_FIELDS, ITEM_FIELDS, invoiceIssues, invoiceCsv } from '../../services/invoiceExtraction';
+import InvoiceExtractionWorkspace from '../../components/InvoiceExtractionWorkspace';
 import './DocumentTools.css';
 
 const markdownHtml = (text) => sanitizeDocumentHtml(marked.parse(text));
@@ -247,18 +247,5 @@ export function PdfSummarizer() {
 
 export function InvoiceExtractor() {
   const doc = useDocument();
-  const [invoice, setInvoice] = useState(null), [raw, setRaw] = useState(''), [ai, setAi] = useState(false);
-  const extract = () => doc.run(async (pages, signal) => {
-    const text = pages.map((page) => page.text).join('\n\n'); setRaw(text);
-    const local = extractInvoiceLocally(text); setInvoice(local);
-    if (ai) {
-      if (text.length > 24000) throw new Error('Local extraction is ready. AI extraction supports up to 24,000 characters per bill; split this document for AI extraction.');
-      doc.setStatus('Extracting invoice fields with AI…');
-      setInvoice(normalizeInvoice((await callAi('invoice', { text }, signal)).invoice));
-    }
-  });
-  const update = (key, value) => setInvoice((previous) => ({ ...previous, [key]: ['supplierName', 'supplierAddress', 'invoiceNumber', 'invoiceDate', 'gstin', 'currency'].includes(key) ? value : value === '' ? null : Number(value) }));
-  const issues = invoice ? invoiceIssues(invoice) : [];
-  const exportName = `${basename(doc.file)}-extracted`;
-  return <ToolPage toolId="invoice-extractor"><div className="tool-panel document-workspace"><SourceInput doc={doc} images onSelect={() => { setInvoice(null); setRaw(''); }} /><label className="document-check"><input type="checkbox" checked={ai} disabled={doc.busy} onChange={(e) => setAi(e.target.checked)} /> Use AI for complex bills</label><p className="document-hint">Review extracted amounts before exporting.</p><button className="btn btn-primary document-cta" disabled={!doc.file || doc.busy} onClick={extract}>{doc.busy ? 'Extracting…' : 'Extract bill details'}</button></div>{invoice && <div className="tool-panel"><div className="document-actions"><h2>Review extracted details</h2><button className="btn btn-secondary" onClick={() => downloadBlob(new Blob([invoiceCsv(invoice)], { type: 'text/csv;charset=utf-8' }), `${exportName}.csv`)}>Export CSV</button><button className="btn btn-secondary" onClick={() => downloadBlob(new Blob([JSON.stringify({ ...invoice, warnings: issues }, null, 2)], { type: 'application/json' }), `${exportName}.json`)}>Export JSON</button></div>{issues.length > 0 ? <div className="document-warnings" role="status"><strong>Check these values</strong><ul>{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div> : <p className="document-status">Required fields are present and arithmetic checks pass. Verify against the original bill.</p>}<div className="document-field-grid">{Object.entries(INVOICE_FIELDS).map(([key, label]) => <label className="form-group" key={key}>{label}<input className="form-input" type={['supplierName', 'supplierAddress', 'invoiceNumber', 'invoiceDate', 'gstin', 'currency'].includes(key) ? 'text' : 'number'} step="any" value={invoice[key] ?? ''} aria-invalid={['supplierName', 'invoiceNumber', 'invoiceDate', 'gstin', 'subtotal', 'grandTotal'].includes(key) && (invoice[key] === '' || invoice[key] == null)} onChange={(e) => update(key, e.target.value)} /></label>)}</div><div className="document-table-scroll"><table className="document-table"><thead><tr>{ITEM_FIELDS.map((key) => <th key={key}>{key}</th>)}<th>Remove</th></tr></thead><tbody>{invoice.items.map((item, index) => <tr key={index}>{ITEM_FIELDS.map((key) => <td key={key}><input className="form-input" aria-label={`Item ${index + 1} ${key}`} type={key === 'description' ? 'text' : 'number'} step="any" value={item[key] ?? ''} onChange={(e) => setInvoice((previous) => ({ ...previous, items: previous.items.map((entry, i) => i !== index ? entry : { ...entry, [key]: key === 'description' ? e.target.value : e.target.value === '' ? null : Number(e.target.value) }) }))} /></td>)}<td><button className="icon-btn" aria-label={`Remove item ${index + 1}`} onClick={() => setInvoice((previous) => ({ ...previous, items: previous.items.filter((_, i) => i !== index) }))}><Trash2 size={16} /></button></td></tr>)}</tbody></table></div><button className="btn btn-secondary" onClick={() => setInvoice((previous) => ({ ...previous, items: [...previous.items, { description: '', quantity: null, price: null, discount: null, amount: null }] }))}><Plus size={16} /> Add line item</button><details className="document-raw"><summary>View extracted source text</summary><pre>{raw}</pre></details></div>}</ToolPage>;
+  return <ToolPage toolId="invoice-extractor"><InvoiceExtractionWorkspace doc={doc} SourceInput={SourceInput} /></ToolPage>;
 }

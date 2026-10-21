@@ -1,0 +1,22 @@
+.bates-workspace { min-width: 0; }
+.bates-empty-history { display: flex; justify-content: center; gap: 7px; margin-top: 12px; }
+.bates-sequence { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px; margin: 1px 0 13px; background: var(--bg-surface-2); border-radius: 6px; font-size: 12px; }
+.bates-sequence strong { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; color: var(--primary); }
+.bates-sequence span { font-size: 10px; color: var(--text-muted); }
+.bates-files-heading { display: flex; justify-content: space-between; margin: 12px 0 7px; font-size: 12px; color: var(--text-secondary); }
+.bates-files-heading > span:last-child { font-size: 10px; color: var(--text-muted); }
+.bates-files { max-height: 240px; overflow: auto; scrollbar-width: thin; margin-bottom: 12px; }
+.bates-file { display: flex; align-items: center; gap: 2px; margin-bottom: 5px; border: 1px solid var(--border); background: var(--bg-surface); border-radius: 6px; padding: 5px; }
+.bates-file.is-active { border-color: var(--primary); background: var(--primary-light); }
+.bates-file-select { display: flex; flex: 1; align-items: flex-start; gap: 6px; min-width: 0; padding: 3px 1px; text-align: left; color: var(--text-primary); background: transparent; cursor: pointer; }
+.bates-file-select > span { color: var(--text-muted); min-width: 13px; font-size: 11px; margin-top: 1px; }
+.bates-file-select > div { min-width: 0; flex: 1; }
+.bates-file-select strong { display: block; font-size: 11px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.bates-file-select small { display: block; font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+.bates-file-select .bates-file-range { font-family: monospace; font-size: 9px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--primary); }
+.bates-file-actions { display: flex; flex-direction: column; }
+.bates-file-actions .icon-btn { width: 21px; height: 21px; }
+.bates-preview-name { padding: 8px 13px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bates-workspace .watermark-view-tabs > span { max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
+.bates-workspace .watermark-progress { position: sticky; bottom: 12px; z-index: 2; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); }
+.bates-workspace button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

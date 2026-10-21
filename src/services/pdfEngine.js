@@ -205,66 +205,27 @@ export async function getPdfMetadata(file) {
 }
 
 export async function addWatermarkToPdf(file, text, options = {}) {
-  const { PDFDocument, StandardFonts, rgb, degrees } = await getPdfLib();
-  const {
-    opacity = 0.15,
-    fontSize = 48,
-    rotation = 45,
-    color = { r: 0.5, g: 0.5, b: 0.5 },
-    pageRange = '',
-  } = options;
-
-  const bytes = await loadPdfBytes(file);
-  const pdfDoc = await PDFDocument.load(bytes);
-  const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const pages = pdfDoc.getPages();
-
-  const selected = pageRange ? new Set(parsePageRanges(pageRange, pages.length)) : null;
-  for (let index = 0; index < pages.length; index++) {
-    if (selected && !selected.has(index + 1)) continue;
-    const page = pages[index];
-    const { width, height } = page.getSize();
-    page.drawText(text, {
-      x: width / 2 - (text.length * fontSize * 0.3),
-      y: height / 2,
-      size: fontSize,
-      font,
-      color: rgb(color.r, color.g, color.b),
-      opacity,
-      rotate: degrees(rotation),
-    });
-  }
-  const out = await pdfDoc.save();
-  return new Blob([out], { type: 'application/pdf' });
+  const { readWatermarkSource, createWatermarkedPdf, watermarkDefaults } = await import('./pdfWatermark');
+  const source = await readWatermarkSource(file, { signal: options.signal });
+  const color = typeof options.color === 'string' ? options.color : options.color ? '#' + ['r', 'g', 'b'].map(key => Math.round(Math.max(0, Math.min(1, Number(options.color[key]))) * 255).toString(16).padStart(2, '0')).join('') : '#808080';
+  const settings = { ...watermarkDefaults(), text, fontSize: options.fontSize ?? 48, opacity: (options.opacity ?? .15) * 100, rotation: options.rotation ?? 45, color, pagesMode: options.pageRange?.trim() ? 'custom' : 'all', range: options.pageRange || '' };
+  return createWatermarkedPdf(source, settings, null, { signal: options.signal, onProgress: options.onProgress });
 }
-
 export async function addPageNumbers(file, options = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await getPdfLib();
-  const { position = 'bottom-center', startAt = 1, fontSize = 10, prefix = '', suffix = '', pageRange = '' } = options;
-
-  const bytes = await loadPdfBytes(file);
-  const pdfDoc = await PDFDocument.load(bytes);
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const pages = pdfDoc.getPages();
-
-  const selected = pageRange ? new Set(parsePageRanges(pageRange, pages.length)) : null;
-  let sequence = 0;
-  for (let i = 0; i < pages.length; i++) {
-    if (selected && !selected.has(i + 1)) continue;
-    const page = pages[i];
-    const { width, height } = page.getSize();
-    const number = startAt + sequence;
-    const num = `${prefix}${number}${suffix}`.replaceAll('{page}', String(number)).replaceAll('{total}', String(selected?.size || pages.length));
-    sequence += 1;
-    let x = width / 2 - 20;
-    let y = 20;
-    if (position === 'top-center') y = height - 30;
-    if (position === 'bottom-right') { x = width - 50; y = 20; }
-    if (position === 'bottom-left') { x = 20; y = 20; }
-    page.drawText(num, { x, y, size: fontSize, font, color: rgb(0.2, 0.2, 0.2) });
+  const { createNumberedPdf, pageNumberDefaults, readPageNumberSource } = await import('./pdfPageNumbers');
+  const source = await readPageNumberSource(file, { signal: options.signal });
+  const settings = { ...pageNumberDefaults(), ...options };
+  // Keep workflow and older prefix/suffix callers compatible with the new engine.
+  if (!options.format && (options.prefix != null || options.suffix != null)) {
+    settings.format = 'custom';
+    settings.template = `${options.prefix || ''}{number}${options.suffix || ''}`;
+    settings.template = settings.template.replaceAll('{page}', '{number}');
   }
-  const out = await pdfDoc.save();
-  return new Blob([out], { type: 'application/pdf' });
+  if (options.pageRange != null) {
+    settings.pagesMode = options.pageRange.trim() ? 'custom' : 'all';
+    settings.range = options.pageRange;
+  }
+  return createNumberedPdf(source, settings, { signal: options.signal, onProgress: options.onProgress });
 }
 
 export async function imagesToPdf(imageFiles, options = {}) {
@@ -393,16 +354,11 @@ export async function createZipFromBlobs(items) {
   return zip.generateAsync({ type: 'blob' });
 }
 
-export async function flattenPdf(file) {
-  const { PDFDocument } = await getPdfLib();
-  const bytes = await loadPdfBytes(file);
-  const pdfDoc = await PDFDocument.load(bytes);
-  // Flatten by removing annotations and form fields
-  pdfDoc.getForm().flatten();
-  const out = await pdfDoc.save();
-  return new Blob([out], { type: 'application/pdf' });
+export async function flattenPdf(file, options = {}) {
+  const { createFlattenedPdf, flattenDefaults, readFlattenSource } = await import('./pdfFlatten');
+  const source = await readFlattenSource(file, { signal: options.signal });
+  return (await createFlattenedPdf(source, { ...flattenDefaults(), ...options }, { signal: options.signal, onProgress: options.onProgress })).blob;
 }
-
 export function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

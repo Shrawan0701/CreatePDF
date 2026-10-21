@@ -1,0 +1,59 @@
+.scan-workspace { display: grid; gap: 18px; }
+.scan-workspace .tool-panel { margin: 0; min-width: 0; padding: 24px; border: 1px solid var(--border); }
+.scan-fieldset { min-inline-size: 0; padding: 0; border: 0; margin: 0; }
+.scan-fieldset:disabled { opacity: .65; }
+.scan-fieldset:disabled .drop-zone { pointer-events: none; }
+.scan-import .scan-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 215px; padding: 24px; gap: 8px; }
+.scan-upload-icon { display: grid; place-items: center; width: 54px; height: 54px; background: var(--primary-light); color: var(--primary); border-radius: 14px; margin-bottom: 5px; }
+.scan-drop .drop-zone-title { margin: 0; font-size: 19px; }
+.scan-drop .drop-zone-sub { margin: 0; font-size: 13px; }
+.scan-browse { display: flex; align-items: center; gap: 6px; color: var(--primary); font-size: 13px; font-weight: 600; margin-top: 8px; }
+.scan-has-pages .scan-drop { min-height: 130px; padding: 18px; gap: 6px; }
+.scan-has-pages .scan-upload-icon { display: none; }
+.scan-has-pages .drop-zone-title { font-size: 16px; }
+.scan-has-pages .scan-browse { margin-top: 2px; }
+.scan-capture-row { display: flex; justify-content: center; align-items: center; gap: 14px; padding-top: 16px; font-size: 12px; color: var(--text-secondary); }
+.scan-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.scan-section-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; margin: 0; }
+.scan-section-heading > span { color: var(--text-muted); font-size: 11px; }
+.scan-count { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 5px; color: var(--primary); background: var(--primary-light); font-size: 11px; }
+.scan-settings { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.scan-workspace .form-group { min-width: 0; margin-bottom: 0; }
+.scan-settings .form-select { width: 100%; }
+.scan-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.7; margin: 12px 0 0; }
+.scan-warning { color: var(--warning); }
+.scan-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; align-items: start; }
+.scan-page-list { display: grid; gap: 10px; max-height: 740px; overflow-y: auto; }
+.scan-thumb { border: 1px solid var(--border); border-radius: 8px; padding: 9px; min-width: 0; }
+.scan-thumb.selected { border-color: var(--primary); background: var(--primary-light); }
+.scan-page-select { display: flex; align-items: center; width: 100%; gap: 12px; color: var(--text-primary); cursor: pointer; text-align: left; }
+.scan-page-select > span { min-width: 0; flex: 1; }
+.scan-page-select strong { display: block; font-size: 12px; font-weight: 600; }
+.scan-page-select small { display: block; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--text-secondary); margin-top: 5px; }
+.scan-page-select .scan-paper-wrap { width: 58px; height: 74px; flex-shrink: 0; }
+.scan-page-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 7px; }
+.scan-preview { height: clamp(340px, 58vh, 640px); padding: 24px; border-radius: 8px; background: var(--bg-surface-2); border: 1px solid var(--border); }
+.scan-paper-wrap { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; min-width: 0; }
+.scan-paper-wrap canvas { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; background: #fff; box-shadow: 0 2px 12px #0002; }
+.scan-rendering canvas { opacity: .5; }
+.scan-preview-error { position: absolute; inset: 0; display: grid; place-items: center; background: var(--bg-surface); color: var(--danger); padding: 12px; font-size: 12px; }
+.scan-edit-toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 16px 0; }
+.scan-adjustments { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.scan-adjustments input { width: 100%; accent-color: var(--primary); cursor: pointer; }
+.scan-export { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.scan-export > span { color: var(--text-secondary); font-size: 12px; }
+.scan-workspace button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 1000px) { .scan-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); } .scan-layout { grid-template-columns: 200px minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .scan-workspace .tool-panel { padding: 16px; }
+  .scan-layout { grid-template-columns: minmax(0, 1fr); }
+  .scan-page-list { display: flex; overflow-x: auto; padding-bottom: 5px; }
+  .scan-thumb { min-width: 170px; }
+  .scan-adjustments { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .scan-preview { height: 390px; padding: 16px; }
+  .scan-section-heading { flex-wrap: wrap; gap: 6px; }
+  .scan-capture-row { flex-wrap: wrap; gap: 8px; }
+  .scan-import .scan-drop { padding: 20px 12px; }
+  .scan-drop .drop-zone-title { font-size: 17px; }
+}
+@media (max-width: 390px) { .scan-settings { grid-template-columns: minmax(0, 1fr); } }

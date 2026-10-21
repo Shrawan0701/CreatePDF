@@ -6,12 +6,17 @@ import { createHandler } from './server/ai.js'
 import { createWordPdfHandler, createPowerpointPdfHandler } from './server/wordPdf.js'
 import { createHtmlPdfHandler } from './server/htmlPdf.js'
 import { APP_PATHS } from './src/seo/metadata.js'
+import { attachWhiteboardRelay } from './server/whiteboard.js'
 
 try { process.loadEnvFile('.env.local') } catch (error) { if (error.code !== 'ENOENT') throw error }
 
 const app = express()
 const server = createServer(app)
-const sockets = new WebSocketServer({ server, path: '/signal' })
+const sockets = new WebSocketServer({ noServer: true })
+server.on('upgrade', (request, socket, head) => {
+  if (request.url?.split('?')[0] === '/signal') sockets.handleUpgrade(request, socket, head, peer => sockets.emit('connection', peer, request))
+})
+attachWhiteboardRelay(server)
 const port = Number(process.env.PORT || 4173)
 const dist = resolve('dist')
 

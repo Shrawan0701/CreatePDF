@@ -1,336 +1,385 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlignCenter, AlignLeft, AlignRight, Bold, Download, Edit3, FileCheck2, Italic, Minus, MousePointer2, Plus, Redo2, Save, Square, Trash2, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { AlignCenter, AlignLeft, AlignRight, Bold, ChevronLeft, ChevronRight, Copy, Download, Edit3, Eye, Highlighter, ImagePlus, Italic, Layers, LoaderCircle, Minus, MousePointer2, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, Save, Square, Trash2, Type, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { ToolPage } from '../../components/ToolPage'
-import { DropZone, ProgressBar, downloadBlob } from '../../components/ui'
-import { getPdfjsLib, getPdfLib, loadPdfBytes } from '../../services/pdfEngine'
-import { useApp } from '../../context/AppContext'
+import { DocumentPdfPreview } from '../../components/DocumentPdfPreview'
+import { PdfPageThumbnail } from '../../components/PdfPageThumbnail'
+import { DropZone, Modal, ProgressBar, downloadBlob } from '../../components/ui'
+import { getPdfjsLib, loadPdfBytes } from '../../services/pdfEngine'
+import { createEditedPdf, readEditorImage } from '../../services/pdfEditor'
 import { getDocument as getSavedDocument, saveDocument } from '../../services/storage'
-import { drawUnicodeText, embedUnicodeFonts, measureUnicodeText } from '../../services/unicodePdf'
+import { useApp } from '../../context/AppContext'
+import './EditPdf.css'
 
 const makeId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`
+const emptyHistory = () => ({ past: [], items: [], future: [] })
+const defaults = { fontSize: 18, fontFamily: 'Helvetica', color: '#172b27', bold: false, italic: false, align: 'left', strokeWidth: 2, opacity: 1, filled: false }
+const shapeDefaults = { rect: { color: '#172b27', strokeWidth: 2, opacity: 1, filled: false }, line: { color: '#172b27', strokeWidth: 2, opacity: 1 }, highlight: { color: '#f5ce36', opacity: .35, filled: true } }
+const tools = [['select', MousePointer2, 'Select'], ['text', Type, 'Text'], ['edit', Edit3, 'Edit text'], ['highlight', Highlighter, 'Highlight'], ['rect', Square, 'Rectangle'], ['line', Minus, 'Line']]
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value))
 
-function overlayTextLines(text, font, size, width, unicodeFonts) {
-  const lines = []
-  for (const paragraph of String(text || '').replace(/\r/g, '').split('\n')) {
-    let line = ''
-    for (const character of paragraph) {
-      if (line && measureUnicodeText(line + character, font, size, unicodeFonts) > width) {
-        const separator = line.lastIndexOf(' ')
-        if (separator > 0) { lines.push(line.slice(0, separator)); line = line.slice(separator + 1) + character }
-        else { lines.push(line); line = character }
-      } else line += character
-    }
-    lines.push(line)
-  }
-  return lines
+async function disposePdfTask(task) {
+  try { await task?.destroy() } catch { /* Closing a cancelled load must not interrupt the editor. */ }
+}
+
+function IconButton({ icon: Icon, label, ...props }) {
+  return <button type="button" className="ed-icon" title={label} aria-label={label} {...props}><Icon size={17} /></button>
 }
 
 export default function EditPdf() {
   const { showToast, recordRecentFile } = useApp()
-  const [file, setFile] = useState(null)
-  const [pdfDoc, setPdfDoc] = useState(null)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(0)
-  const [pageSize, setPageSize] = useState({ width: 1, height: 1, scale: 1 })
-  const [workspaceWidth, setWorkspaceWidth] = useState(900)
-  const [scrollOffset, setScrollOffset] = useState(0)
-  const [textItems, setTextItems] = useState([])
-  const [overlays, setOverlays] = useState([])
-  const [selectedId, setSelectedId] = useState(null)
-  const [editingId, setEditingId] = useState(null)
-  const [activeTool, setActiveTool] = useState('select')
-  const [config] = useState({ fontSize: 18, color: '#111827', fill: '#0d7865' })
-  const [history, setHistory] = useState([])
-  const [future, setFuture] = useState([])
-  const [processing, setProcessing] = useState(false)
-  const [rendering, setRendering] = useState(false)
-  const [zoom, setZoom] = useState(1)
-  const canvasRef = useRef(null)
-  const workspaceRef = useRef(null)
-  const scrollRef = useRef(null)
-  const renderTaskRef = useRef(null)
-  const renderSequenceRef = useRef(0)
-  const interactionRef = useRef(null)
-  const editSnapshotRef = useRef(null)
+  const [source, setSource] = useState(null), [loading, setLoading] = useState(false), [error, setError] = useState('')
+  const [page, setPage] = useState(1), [pageInput, setPageInput] = useState('1'), [zoom, setZoom] = useState(1), [width, setWidth] = useState(720)
+  const [view, setView] = useState({ width: 600, height: 780, scale: 1, page: 0, textItems: [] })
+  const [rendering, setRendering] = useState(false), [retry, setRetry] = useState(0), [showPages, setShowPages] = useState(true)
+  const [edits, setEdits] = useState(emptyHistory), [selectedId, setSelectedId] = useState(null), [editingId, setEditingId] = useState(null)
+  const [tool, setTool] = useState('select'), [config, setConfig] = useState(defaults), [savedItems, setSavedItems] = useState(null)
+  const [shapeConfig, setShapeConfig] = useState(shapeDefaults)
+  const [busy, setBusy] = useState(false), [imageLoading, setImageLoading] = useState(false), [progress, setProgress] = useState(0), [status, setStatus] = useState(''), [preview, setPreview] = useState(null)
+  const canvas = useRef(null), stage = useRef(null), scroller = useRef(null), pdfInput = useRef(null), imageInput = useRef(null)
+  const reading = useRef(null), operation = useRef(null), interaction = useRef(null), typingSnapshot = useRef(null), cached = useRef(null)
+  const sourceRef = useRef(source), editsRef = useRef(edits), dirtyRef = useRef(false), loadRef = useRef(null), imageJob = useRef(null)
+  sourceRef.current = source; editsRef.current = edits
+  const dirty = edits.items.length > 0 && edits.items !== savedItems
+  dirtyRef.current = dirty
+  const selected = edits.items.find(item => item.id === selectedId)
+  const objectType = selected?.type || tool
+  const properties = selected || shapeConfig[tool] || config
+  const locked = loading || busy || imageLoading
+  const ready = source && view.source === source && view.page === page && view.zoom === zoom && view.containerWidth === width && !rendering
+  const textProperties = selected ? ['text', 'replace'].includes(selected.type) : ['select', 'text', 'edit'].includes(tool)
+  const shapeProperties = ['highlight', 'rect', 'line'].includes(objectType)
+  const hasReplacement = edits.items.some(item => item.type === 'replace')
 
-  const commit = useCallback((updater) => {
-    setOverlays((current) => {
-      const next = typeof updater === 'function' ? updater(current) : updater
-      setHistory((items) => [...items.slice(-49), current])
-      setFuture([])
-      return next
+  const commit = updater => {
+    cached.current = null
+    setEdits(previous => {
+      const items = typeof updater === 'function' ? updater(previous.items) : updater
+      if (items === previous.items) return previous
+      return { past: [...previous.past.slice(-49), previous.items], items, future: [] }
     })
-  }, [])
-
-  const loadFile = async (files) => {
-    const selected = files.find((item) => item.type === 'application/pdf')
-    if (!selected) return showToast('Choose a valid PDF file.', 'warning')
-    try {
-      const pdfjs = await getPdfjsLib()
-      const pdf = await pdfjs.getDocument({ data: await loadPdfBytes(selected) }).promise
-      setFile(selected); setPdfDoc(pdf); setTotalPages(pdf.numPages); setCurrentPage(1)
-      setOverlays([]); setHistory([]); setFuture([]); setSelectedId(null); setEditingId(null)
-    } catch (error) { showToast(`Unable to open PDF: ${error.message}`, 'error') }
   }
+  const transient = updater => { cached.current = null; setEdits(previous => ({ ...previous, items: updater(previous.items) })) }
+  const finishTyping = () => {
+    const snapshot = typingSnapshot.current
+    typingSnapshot.current = null
+    if (snapshot && snapshot !== editsRef.current.items) setEdits(previous => ({ past: [...previous.past.slice(-49), snapshot], items: previous.items, future: [] }))
+    setEditingId(null)
+  }
+  const undo = () => {
+    finishTyping(); interaction.current = null
+    setEdits(previous => previous.past.length ? { past: previous.past.slice(0, -1), items: previous.past.at(-1), future: [previous.items, ...previous.future] } : previous)
+    setSelectedId(null)
+  }
+  const redo = () => {
+    finishTyping(); interaction.current = null
+    setEdits(previous => previous.future.length ? { past: [...previous.past.slice(-49), previous.items], items: previous.future[0], future: previous.future.slice(1) } : previous)
+    setSelectedId(null)
+  }
+  const selectTool = value => { finishTyping(); setSelectedId(null); setTool(value) }
+  const changePage = value => {
+    if (locked || !source) return
+    finishTyping(); interaction.current = null; setSelectedId(null); setError('')
+    setPage(clamp(Math.round(Number(value) || 1), 1, source.pdf.numPages))
+    scroller.current?.scrollTo({ top: 0, left: 0 })
+  }
+  useEffect(() => { setPageInput(String(page)) }, [page])
 
+  const loadFile = async incoming => {
+    if (operation.current) return
+    const file = incoming[0]
+    if (!file) return
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) { setError('Choose a PDF file.'); return }
+    if (dirtyRef.current && !window.confirm('Open another PDF and discard unsaved edits?')) return
+    disposePdfTask(reading.current?.task)
+    const request = {}; reading.current = request
+    setLoading(true); setError('')
+    try {
+      const pdfjs = await getPdfjsLib(), data = await loadPdfBytes(file)
+      if (reading.current !== request) return
+      request.task = pdfjs.getDocument({ data })
+      const pdf = await request.task.promise
+      if (reading.current !== request) { await disposePdfTask(request.task); return }
+      imageJob.current = null; setImageLoading(false); cached.current = null; interaction.current = null; typingSnapshot.current = null
+      setSource({ file, pdf, loadingTask: request.task }); setPage(1); setPageInput('1'); setZoom(1); setEdits(emptyHistory()); setSavedItems(null)
+      setSelectedId(null); setEditingId(null); setTool('select'); setConfig(defaults); setShapeConfig(shapeDefaults); setPreview(null)
+    } catch (failure) {
+      disposePdfTask(request.task)
+      if (reading.current === request) setError(failure.name === 'PasswordException' ? 'Unlock this password-protected PDF before editing it.' : failure.message || 'Could not open this PDF.')
+    } finally { if (reading.current === request) { reading.current = null; setLoading(false) } }
+  }
+  loadRef.current = loadFile
   useEffect(() => {
     const documentId = new URLSearchParams(window.location.search).get('document')
     if (!documentId) return
-    let active = true
-    const openSaved = async () => {
-      try {
-        const saved = await getSavedDocument(documentId)
-        if (!saved?.blob) throw new Error('This saved document is no longer available on this device.')
-        const selected = new File([saved.blob], saved.name, { type: 'application/pdf' })
-        const pdfjs = await getPdfjsLib()
-        const pdf = await pdfjs.getDocument({ data: await loadPdfBytes(selected) }).promise
-        if (active) { setFile(selected); setPdfDoc(pdf); setTotalPages(pdf.numPages); setCurrentPage(1) }
-        else await pdf.loadingTask.destroy()
-      } catch (error) { if (active) showToast(error.message, 'error') }
-    }
-    openSaved()
-    return () => { active = false }
-  }, [showToast])
-
-  useEffect(() => () => { renderTaskRef.current?.cancel(); pdfDoc?.loadingTask.destroy().catch(() => {}) }, [pdfDoc])
-
-  const renderPage = useCallback(async () => {
-    if (!pdfDoc || !canvasRef.current) return
-    const sequence = ++renderSequenceRef.current
-    const previous = renderTaskRef.current
-    previous?.cancel()
-    if (previous) await previous.promise.catch(() => {})
-    if (sequence !== renderSequenceRef.current) return
-    setRendering(true)
-    try {
-      const page = await pdfDoc.getPage(currentPage)
-      if (sequence !== renderSequenceRef.current) return
-      const unscaled = page.getViewport({ scale: 1 })
-      const targetWidth = Math.min(1100, Math.max(240, workspaceWidth)) * zoom
-      const scale = targetWidth / unscaled.width
-      const viewport = page.getViewport({ scale })
-      const canvas = canvasRef.current
-      canvas.width = Math.round(viewport.width * devicePixelRatio)
-      canvas.height = Math.round(viewport.height * devicePixelRatio)
-      canvas.style.width = `${viewport.width}px`
-      canvas.style.height = `${viewport.height}px`
-      setPageSize({ width: viewport.width, height: viewport.height, scale })
-      const context = canvas.getContext('2d')
-      context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
-      const task = page.render({ canvasContext: context, viewport })
-      renderTaskRef.current = task
-      await task.promise
-      if (sequence !== renderSequenceRef.current) return
-      const pdfjs = await getPdfjsLib()
-      const content = await page.getTextContent()
-      if (sequence !== renderSequenceRef.current) return
-      setTextItems(content.items.map((item, index) => {
-        const transform = pdfjs.Util.transform(viewport.transform, item.transform)
-        const itemHeight = Math.max(Math.hypot(transform[2], transform[3]), 4)
-        const itemWidth = Math.max(item.width * scale, itemHeight * Math.max(item.str.length * .35, 1), 8)
-        const descent = Math.abs(content.styles[item.fontName]?.descent ?? -.2) * itemHeight
-        return { id: `${currentPage}-${index}`, text: Math.abs(transform[1]) < .1 ? item.str : '', x: transform[4], y: transform[5] - itemHeight, width: itemWidth, height: itemHeight, descent, fontSize: itemHeight / scale }
-      }).filter((item) => item.text.trim()))
-    } catch (error) { if (sequence === renderSequenceRef.current && error.name !== 'RenderingCancelledException') showToast(`Page rendering failed: ${error.message}`, 'error') }
-    finally { if (sequence === renderSequenceRef.current) setRendering(false) }
-  }, [pdfDoc, currentPage, zoom, workspaceWidth, showToast])
-
-  useEffect(() => { renderPage(); return () => { renderSequenceRef.current++; renderTaskRef.current?.cancel() } }, [renderPage])
+    let cancelled = false
+    getSavedDocument(documentId).then(saved => {
+      if (cancelled) return
+      if (!saved?.blob) throw new Error('This saved document is no longer available on this device.')
+      return loadRef.current([new File([saved.blob], saved.name, { type: 'application/pdf' })])
+    }).catch(failure => { if (!cancelled) setError(failure.message) })
+    return () => { cancelled = true }
+  }, [])
+  useEffect(() => () => { disposePdfTask(source?.loadingTask || source?.pdf?.loadingTask) }, [source])
+  useEffect(() => () => { disposePdfTask(reading.current?.task); reading.current = null; operation.current?.abort(); imageJob.current = null }, [])
   useEffect(() => {
-    if (!file || !scrollRef.current) return
-    const element = scrollRef.current
+    const beforeUnload = event => { if (dirtyRef.current) { event.preventDefault(); event.returnValue = '' } }
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => window.removeEventListener('beforeunload', beforeUnload)
+  }, [])
+
+  useEffect(() => {
+    const element = scroller.current
+    if (!element) return
     const resize = () => {
       const styles = getComputedStyle(element)
-      setWorkspaceWidth(Math.max(240, element.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight)))
+      const next = Math.max(160, Math.floor(element.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight) - 2))
+      setWidth(previous => previous === next ? previous : next)
     }
-    resize()
-    const observer = new ResizeObserver(resize)
-    observer.observe(element)
+    const observer = new ResizeObserver(resize); observer.observe(element); resize()
     return () => observer.disconnect()
-  }, [file])
+  }, [source, showPages])
 
-  const pointFromEvent = (event) => {
-    const rect = workspaceRef.current.getBoundingClientRect()
-    return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) }
+  useEffect(() => {
+    if (!source) return
+    let cancelled = false, task
+    setRendering(true)
+    const draw = async () => {
+      const pdfPage = await source.pdf.getPage(page)
+      if (cancelled) return
+      const native = pdfPage.getViewport({ scale: 1 })
+      const scale = Math.min(1100, width) / native.width * zoom
+      const viewport = pdfPage.getViewport({ scale })
+      const density = Math.min(window.devicePixelRatio || 1, 2, 8192 / Math.max(viewport.width, viewport.height), Math.sqrt(16_000_000 / (viewport.width * viewport.height)))
+      const buffer = window.document.createElement('canvas')
+      try {
+        buffer.width = Math.max(1, Math.ceil(viewport.width * density)); buffer.height = Math.max(1, Math.ceil(viewport.height * density))
+        task = pdfPage.render({ canvasContext: buffer.getContext('2d'), viewport, transform: [density, 0, 0, density, 0, 0], background: '#ffffff' })
+        await task.promise
+        const content = await pdfPage.getTextContent(), pdfjs = await getPdfjsLib()
+        if (cancelled || !canvas.current) return
+        const textItems = content.items.flatMap((item, index) => {
+          if (!item.str?.trim()) return []
+          const transform = pdfjs.Util.transform(native.transform, item.transform)
+          if (Math.abs(transform[1]) > .1 || transform[0] <= 0) return []
+          const fontSize = Math.max(1, Math.hypot(transform[2], transform[3]))
+          const style = content.styles[item.fontName] || {}, ascent = style.ascent ?? .85, descent = Math.abs(style.descent ?? -.2)
+          const x = clamp(transform[4] / native.width, 0, 1), y = clamp((transform[5] - fontSize * ascent) / native.height, 0, 1)
+          const textWidth = item.width * Math.hypot(native.transform[0], native.transform[1])
+          return [{ id: `${page}-${index}`, text: item.str, x, y, width: Math.min(1 - x, Math.max(2, textWidth) / native.width), height: Math.min(1 - y, fontSize * (ascent + descent) / native.height), fontSize, fontFamily: /mono/i.test(style.fontFamily) ? 'Courier' : /sans/i.test(style.fontFamily) ? 'Helvetica' : /serif/i.test(style.fontFamily) ? 'Times' : 'Helvetica' }]
+        })
+        const target = canvas.current
+        target.width = buffer.width; target.height = buffer.height
+        target.style.width = `${viewport.width}px`; target.style.height = `${viewport.height}px`
+        target.getContext('2d').drawImage(buffer, 0, 0)
+        setView({ source, page, zoom, containerWidth: width, width: viewport.width, height: viewport.height, scale, nativeWidth: native.width, nativeHeight: native.height, textItems })
+      } finally { buffer.width = buffer.height = 0 }
+    }
+    draw().catch(failure => { if (!cancelled && failure.name !== 'RenderingCancelledException') setError(`Could not render page ${page}: ${failure.message}`) }).finally(() => { if (!cancelled) setRendering(false) })
+    return () => { cancelled = true; task?.cancel() }
+  }, [source, page, width, zoom, retry])
+
+  const point = event => {
+    const bounds = stage.current.getBoundingClientRect()
+    return { x: clamp((event.clientX - bounds.left) / bounds.width, 0, 1), y: clamp((event.clientY - bounds.top) / bounds.height, 0, 1) }
   }
-
-  const addOverlay = (event) => {
-    if (activeTool === 'select') return
+  const addText = event => {
+    const position = point(event), size = config.fontSize
+    const item = { ...config, id: makeId(), type: 'text', page, x: Math.min(position.x, .75), y: Math.min(position.y, Math.max(0, 1 - size * 1.5 / view.nativeHeight)), width: .25, height: Math.min(1, Math.max(.04, size * 1.5 / view.nativeHeight)), text: '' }
+    commit(items => [...items, item]); setSelectedId(item.id); setEditingId(item.id); setTool('select')
+  }
+  const editOriginal = item => {
+    if (!ready || locked) return
+    const paddingX = 1.5 / view.nativeWidth, paddingY = 1.5 / view.nativeHeight
+    const x = Math.max(0, item.x - paddingX), y = Math.max(0, item.y - paddingY)
+    const sourceRegion = { x, y, width: Math.min(1 - x, item.width + paddingX * 2), height: Math.min(1 - y, item.height + paddingY * 2) }
+    const target = canvas.current
+    const pixel = target.getContext('2d').getImageData(clamp(Math.floor(x * target.width), 0, target.width - 1), clamp(Math.floor(y * target.height), 0, target.height - 1), 1, 1).data
+    const backgroundColor = `#${[...pixel].slice(0, 3).map(value => value.toString(16).padStart(2, '0')).join('')}`
+    const replacement = { ...defaults, ...item, id: makeId(), sourceId: item.id, type: 'replace', page, width: Math.min(1 - item.x, Math.max(item.width, .05)), height: Math.min(1 - item.y, Math.max(item.height, item.fontSize * 1.3 / view.nativeHeight)), sourceRegion, backgroundColor, original: item.text }
+    commit(items => [...items.filter(entry => entry.sourceId !== item.id), replacement]); setSelectedId(replacement.id); setEditingId(replacement.id); setTool('select')
+  }
+  const stageDown = event => {
+    if (event.button !== 0 || !ready || locked) return
+    if (tool === 'select' || tool === 'edit') { finishTyping(); setSelectedId(null); return }
     event.preventDefault()
+    if (tool === 'text') { addText(event); return }
+    const start = point(event)
+    const item = { ...shapeConfig[tool], id: makeId(), type: tool, page, x: Math.min(start.x, .95), y: Math.min(start.y, .96), width: Math.max(.003, Math.min(.23, 1 - start.x)), height: Math.max(.002, Math.min(tool === 'line' ? .002 : tool === 'highlight' ? .03 : .12, 1 - start.y)) }
+    interaction.current = { id: item.id, mode: 'create', start, original: item, snapshot: edits.items }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    transient(items => [...items, item]); setSelectedId(item.id)
+  }
+  const startInteraction = (event, item, mode) => {
+    if (event.button !== 0 || locked || !ready) return
     event.stopPropagation()
-    const point = pointFromEvent(event)
-    const overlay = activeTool === 'text'
-      ? { id: makeId(), type: 'text', page: currentPage, x: Math.min(point.x, .78), y: Math.min(point.y, .966), width: .22, height: .034, text: '', fontSize: config.fontSize, fontFamily: 'Helvetica', color: config.color, bold: false, italic: false, align: 'left' }
-      : { id: makeId(), type: 'rect', page: currentPage, x: Math.min(point.x, .82), y: Math.min(point.y, .9), width: .18, height: .1, color: config.fill, opacity: .25 }
-    commit((items) => [...items, overlay]); setSelectedId(overlay.id); setEditingId(activeTool === 'text' ? overlay.id : null); setActiveTool('select')
+    if (!['select', 'edit'].includes(tool)) return
+    event.preventDefault(); finishTyping(); setSelectedId(item.id)
+    interaction.current = { id: item.id, mode, start: point(event), original: item, snapshot: edits.items, moved: false }
+    event.currentTarget.setPointerCapture(event.pointerId)
   }
-
-  const editOriginalText = (item) => {
-    const sourceRegion = { x: Math.max(0, (item.x - 2) / pageSize.width), y: Math.max(0, (item.y - 2) / pageSize.height), width: Math.min(1, (item.width + 4) / pageSize.width), height: Math.min(1, (item.height + item.descent + 4) / pageSize.height) }
-    const canvas = canvasRef.current
-    const ratio = canvas.width / pageSize.width
-    const pixel = canvas.getContext('2d').getImageData(Math.min(canvas.width - 1, Math.max(0, Math.floor((item.x - 2) * ratio))), Math.min(canvas.height - 1, Math.max(0, Math.floor((item.y - 2) * ratio))), 1, 1).data
-    const backgroundColor = `#${[...pixel].slice(0, 3).map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
-    const overlay = { id: makeId(), type: 'replace', sourceId: item.id, page: currentPage, ...sourceRegion, sourceRegion, backgroundColor, text: item.text, original: item.text, fontSize: item.fontSize, fontFamily: 'Helvetica', color: config.color, bold: false, italic: false, align: 'left' }
-    editSnapshotRef.current = null
-    commit((items) => [...items.filter((entry) => entry.sourceId !== item.id), overlay]); setSelectedId(overlay.id); setEditingId(overlay.id)
-  }
-
-  const beginInteraction = (event, overlay, mode) => {
-    if (activeTool !== 'select') return
-    event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture?.(event.pointerId)
-    setSelectedId(overlay.id); setEditingId(null)
-    interactionRef.current = { id: overlay.id, mode, start: pointFromEvent(event), original: { ...overlay }, snapshot: overlays }
-  }
-
-  const moveInteraction = (event) => {
-    const interaction = interactionRef.current
-    if (!interaction) return
-    const point = pointFromEvent(event); const dx = point.x - interaction.start.x; const dy = point.y - interaction.start.y
-    setOverlays((items) => items.map((item) => {
-      if (item.id !== interaction.id) return item
-      if (interaction.mode === 'move') return { ...item, x: Math.max(0, Math.min(1 - item.width, interaction.original.x + dx)), y: Math.max(0, Math.min(1 - item.height, interaction.original.y + dy)) }
-      return { ...item, width: Math.max(.035, Math.min(1 - item.x, interaction.original.width + dx)), height: Math.max(.025, Math.min(1 - item.y, interaction.original.height + dy)) }
+  const moveInteraction = event => {
+    const active = interaction.current
+    if (!active) return
+    const next = point(event), dx = next.x - active.start.x, dy = next.y - active.start.y, original = active.original
+    if (!active.moved && Math.hypot(dx * view.width, dy * view.height) < 3) return
+    active.moved = true
+    transient(items => items.map(item => {
+      if (item.id !== active.id) return item
+      if (active.mode === 'create') return { ...item, x: Math.min(active.start.x, next.x), y: Math.min(active.start.y, next.y), width: Math.max(.003, Math.abs(dx)), height: Math.max(.002, Math.abs(dy)), reverse: dx * dy < 0 }
+      if (active.mode === 'move') return { ...item, x: clamp(original.x + dx, 0, Math.max(0, 1 - original.width)), y: clamp(original.y + dy, 0, Math.max(0, 1 - original.height)) }
+      let itemWidth = clamp(original.width + dx, .015, 1 - original.x), itemHeight = clamp(original.height + dy, .008, 1 - original.y)
+      if (item.type === 'image' && item.lockAspect !== false) {
+        const ratio = original.width / original.height
+        const preferredWidth = Math.abs(dx * view.width) >= Math.abs(dy * view.height) ? original.width + dx : (original.height + dy) * ratio
+        itemWidth = clamp(preferredWidth, .015, Math.min(1 - original.x, (1 - original.y) * ratio)); itemHeight = itemWidth / ratio
+      }
+      return { ...item, width: itemWidth, height: itemHeight }
     }))
   }
-
-  const endInteraction = () => {
-    const interaction = interactionRef.current
-    if (!interaction) return
-    setHistory((items) => [...items.slice(-49), interaction.snapshot]); setFuture([]); interactionRef.current = null
+  const endInteraction = (cancelled = false) => {
+    const active = interaction.current
+    if (!active) return
+    interaction.current = null
+    if (cancelled) { transient(() => active.snapshot); return }
+    if (active.moved || active.mode === 'create') setEdits(previous => ({ ...previous, past: [...previous.past.slice(-49), active.snapshot], future: [] }))
+    if (active.mode === 'create') setTool('select')
   }
-
-  const updateSelected = (updates) => {
-    if (editingId !== selectedId) return commit((items) => items.map((item) => item.id === selectedId ? { ...item, ...updates } : item))
-    setOverlays((items) => {
-      if (!editSnapshotRef.current) editSnapshotRef.current = items
-      return items.map((item) => item.id === selectedId ? { ...item, ...updates } : item)
-    })
+  const changeProperty = updates => {
+    if (shapeConfig[objectType]) setShapeConfig(previous => ({ ...previous, [objectType]: { ...previous[objectType], ...updates } }))
+    else setConfig(previous => ({ ...previous, ...updates }))
+    if (selectedId) commit(items => items.map(item => {
+      if (item.id !== selectedId) return item
+      const next = { ...item, ...updates }
+      if (updates.fontSize && ['text', 'replace'].includes(item.type)) next.height = Math.min(1 - item.y, Math.max(item.height, updates.fontSize * 1.4 * Math.max(1, item.text.split('\n').length) / view.nativeHeight))
+      return next
+    }))
   }
-  const finishEditing = (overlay) => {
-    if (editSnapshotRef.current) {
-      setHistory((items) => [...items.slice(-49), editSnapshotRef.current])
-      setFuture([])
-      editSnapshotRef.current = null
-    }
-    if (!overlay.text.trim() && overlay.type === 'text') removeSelected()
-    else setEditingId(null)
+  const removeSelected = () => {
+    if (!selectedId) return
+    typingSnapshot.current = null; setEditingId(null)
+    commit(items => items.filter(item => item.id !== selectedId)); setSelectedId(null)
   }
-  const undo = () => { if (!history.length) return; const previous = history.at(-1); setHistory(history.slice(0, -1)); setFuture((items) => [overlays, ...items]); setOverlays(previous); setSelectedId(null); setEditingId(null); editSnapshotRef.current = null }
-  const redo = () => { if (!future.length) return; const next = future[0]; setFuture(future.slice(1)); setHistory((items) => [...items, overlays]); setOverlays(next); setSelectedId(null); setEditingId(null); editSnapshotRef.current = null }
-  const removeSelected = () => { if (!selectedId) return; commit((items) => items.filter((item) => item.id !== selectedId)); setSelectedId(null); setEditingId(null) }
-
-  const toolbarStyle = (overlay) => {
-    const availableWidth = workspaceWidth
-    const pageOffset = Math.max(0, (availableWidth - pageSize.width) / 2)
-    const visibleStart = Math.max(0, scrollOffset - pageOffset)
-    const visibleEnd = Math.min(pageSize.width, scrollOffset + availableWidth - pageOffset)
-    const width = Math.min(500, visibleEnd - visibleStart - 12)
-    const origin = overlay.x * pageSize.width
-    return { width, maxWidth: width, left: Math.max(visibleStart + 6, Math.min(origin, visibleEnd - width - 6)) - origin, bottom: overlay.y < .1 ? 'auto' : undefined, top: overlay.y < .1 ? 'calc(100% + 14px)' : undefined }
+  const duplicate = () => {
+    if (!selected) return
+    finishTyping()
+    const next = { ...selected, id: makeId(), x: Math.min(1 - selected.width, selected.x + .025), y: Math.min(1 - selected.height, selected.y + .025), type: selected.type === 'replace' ? 'text' : selected.type, sourceId: undefined, sourceRegion: undefined }
+    commit(items => [...items, next]); setSelectedId(next.id)
+  }
+  const insertImage = async incoming => {
+    if (!incoming[0] || locked || !ready) return
+    const request = { source, page }; imageJob.current = request
+    setImageLoading(true); setError('')
+    try {
+      const image = await readEditorImage(incoming[0])
+      if (imageJob.current !== request || sourceRef.current !== source) return
+      const width = Math.min(.45, .5 * view.nativeHeight * image.aspect / view.nativeWidth), height = width * view.nativeWidth / (image.aspect * view.nativeHeight)
+      const item = { ...image, id: makeId(), page, type: 'image', x: (1 - width) / 2, y: (1 - height) / 2, width, height, lockAspect: true }
+      commit(items => [...items, item]); setSelectedId(item.id); setEditingId(null); setTool('select')
+    } catch (failure) { if (imageJob.current === request) setError(failure.message || 'Could not add this image.') }
+    finally { if (imageJob.current === request) { imageJob.current = null; setImageLoading(false) } }
   }
 
   useEffect(() => {
-    const keyboard = (event) => {
-      const typing = event.target.closest?.('input, textarea, [contenteditable="true"]')
-      if (typing && (event.key === 'Delete' || event.key === 'Backspace' || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z'))) return
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo() }
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId && editingId !== selectedId) { event.preventDefault(); removeSelected() }
-      if (event.key === 'Escape') { setEditingId(null); setSelectedId(null); setActiveTool('select') }
+    const keyboard = event => {
+      if (locked || !source || preview) return
+      if (event.target.closest?.('input, textarea, select, [contenteditable="true"]')) {
+        if (event.key === 'Escape') { event.target.blur(); finishTyping() }
+        return
+      }
+      const key = event.key.toLowerCase(), command = event.ctrlKey || event.metaKey
+      if (command && key === 's') { event.preventDefault(); exportPdf(event.shiftKey ? 'download' : 'save'); return }
+      if (command && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return }
+      if (command && key === 'y') { event.preventDefault(); redo(); return }
+      if (command && key === 'd' && selected) { event.preventDefault(); duplicate(); return }
+      if (command) return
+      if (key === 'enter' && selected && ['text', 'replace'].includes(selected.type) && event.target.closest?.('.ed-object')) { event.preventDefault(); setEditingId(selected.id); setTool('select'); return }
+      if ((key === 'delete' || key === 'backspace') && selectedId) { event.preventDefault(); removeSelected() }
+      if (key === 'escape') { finishTyping(); setSelectedId(null); setTool('select') }
+      if (selected && ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) {
+        event.preventDefault()
+        const step = event.shiftKey ? 10 : 1
+        changeProperty({ x: clamp(selected.x + (key === 'arrowright' ? step : key === 'arrowleft' ? -step : 0) / view.nativeWidth, 0, 1 - selected.width), y: clamp(selected.y + (key === 'arrowdown' ? step : key === 'arrowup' ? -step : 0) / view.nativeHeight, 0, 1 - selected.height) })
+      }
+      const shortcuts = { v: 'select', t: 'text', e: 'edit', h: 'highlight', r: 'rect', l: 'line' }
+      if (shortcuts[key]) { event.preventDefault(); selectTool(shortcuts[key]) }
     }
-    window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard)
+    window.addEventListener('keydown', keyboard)
+    return () => window.removeEventListener('keydown', keyboard)
   })
 
-  const exportPdf = async (saveLocally = false) => {
-    setProcessing(true)
+  const exportPdf = async action => {
+    if (!source || locked || interaction.current) return
+    finishTyping()
+    const snapshot = editsRef.current.items, controller = new AbortController(); operation.current = controller
+    setBusy(true); setError(''); setProgress(0); setStatus('Preparing PDF…')
     try {
-      const { PDFDocument, StandardFonts, rgb } = await getPdfLib()
-      const input = await loadPdfBytes(file)
-      const original = await PDFDocument.load(input)
-      const rasterizedPages = new Set(overlays.filter((overlay) => {
-        const page = original.getPage(overlay.page - 1)
-        const crop = page.getCropBox()
-        const media = page.getMediaBox()
-        return overlay.type === 'replace' || page.getRotation().angle % 360 !== 0 || crop.x !== media.x || crop.y !== media.y || crop.width !== media.width || crop.height !== media.height
-      }).map((overlay) => overlay.page))
-      const source = rasterizedPages.size ? await PDFDocument.create() : original
-      if (rasterizedPages.size) {
-        const pdfjs = await getPdfjsLib()
-        const rendered = await pdfjs.getDocument({ data: input }).promise
-        for (let pageNumber = 1; pageNumber <= original.getPageCount(); pageNumber++) {
-          if (rasterizedPages.has(pageNumber)) {
-            const page = await rendered.getPage(pageNumber)
-            const viewport = page.getViewport({ scale: 2 })
-            const canvas = document.createElement('canvas')
-            canvas.width = Math.ceil(viewport.width)
-            canvas.height = Math.ceil(viewport.height)
-            const context = canvas.getContext('2d')
-            await page.render({ canvasContext: context, viewport }).promise
-            for (const replacement of overlays.filter((overlay) => overlay.page === pageNumber && overlay.type === 'replace')) {
-              const region = replacement.sourceRegion || replacement
-              context.fillStyle = replacement.backgroundColor || '#ffffff'
-              context.fillRect(Math.floor(region.x * canvas.width), Math.floor(region.y * canvas.height), Math.ceil(region.width * canvas.width) + 1, Math.ceil(region.height * canvas.height) + 1)
-            }
-            const image = await source.embedPng(await (await fetch(canvas.toDataURL('image/png'))).arrayBuffer())
-            const width = viewport.width / 2
-            const height = viewport.height / 2
-            source.addPage([width, height]).drawImage(image, { x: 0, y: 0, width, height })
-            canvas.width = canvas.height = 0
-          } else {
-            const [copied] = await source.copyPages(original, [pageNumber - 1])
-            source.addPage(copied)
-          }
-        }
-        await rendered.loadingTask.destroy()
-      }
-      const families = {
-        Helvetica: [StandardFonts.Helvetica, StandardFonts.HelveticaBold, StandardFonts.HelveticaOblique, StandardFonts.HelveticaBoldOblique],
-        Times: [StandardFonts.TimesRoman, StandardFonts.TimesRomanBold, StandardFonts.TimesRomanItalic, StandardFonts.TimesRomanBoldItalic],
-        Courier: [StandardFonts.Courier, StandardFonts.CourierBold, StandardFonts.CourierOblique, StandardFonts.CourierBoldOblique],
-      }
-      const fonts = {}
-      for (const [family, variants] of Object.entries(families)) fonts[family] = await Promise.all(variants.map((variant) => source.embedFont(variant)))
-      const unicode = await embedUnicodeFonts(source)
-      const pages = source.getPages()
-      for (const overlay of overlays) {
-        const page = pages[overlay.page - 1]; if (!page) continue
-        const { width, height } = page.getSize(); const x = overlay.x * width; const boxHeight = overlay.height * height; const y = height - overlay.y * height - boxHeight
-        const hex = overlay.color.replace('#', ''); const color = rgb(parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255)
-        if (overlay.type === 'text' || overlay.type === 'replace') {
-          const font = fonts[overlay.fontFamily || 'Helvetica'][Number(overlay.bold) + Number(overlay.italic) * 2]
-          const unicodeFonts = { ...unicode, baseBold: overlay.bold ? font : null }
-          const boxWidth = overlay.width * width
-          const lines = overlayTextLines(overlay.text, font, overlay.fontSize, boxWidth, unicodeFonts)
-          lines.forEach((line, index) => {
-            const textWidth = measureUnicodeText(line, font, overlay.fontSize, unicodeFonts)
-            const alignedX = overlay.align === 'center' ? x + Math.max(0, (boxWidth - textWidth) / 2) : overlay.align === 'right' ? x + Math.max(0, boxWidth - textWidth) : x
-            drawUnicodeText(page, line, { x: alignedX, y: y + Math.max(0, boxHeight - overlay.fontSize) - index * overlay.fontSize * 1.2, size: overlay.fontSize, font, color }, unicodeFonts)
-          })
-        }
-        else page.drawRectangle({ x, y, width: overlay.width * width, height: boxHeight, color, opacity: overlay.opacity ?? .25, borderColor: color, borderWidth: 1 })
-      }
-      const name = `edited-${file.name}`
-      const blob = new Blob([await source.save()], { type: 'application/pdf' })
-      if (saveLocally) {
-        const id = crypto.randomUUID()
+      const blob = cached.current?.items === snapshot && cached.current?.source === source ? cached.current.blob : await createEditedPdf(source.file, source.pdf, snapshot, { signal: controller.signal, onProgress: (value, label) => { if (operation.current === controller) { setProgress(value); setStatus(label) } } })
+      if (controller.signal.aborted || operation.current !== controller) return
+      cached.current = { source, items: snapshot, blob }
+      const name = `edited-${source.file.name}`
+      if (action === 'preview') setPreview(blob)
+      else if (action === 'save') {
+        const id = makeId()
         await saveDocument(id, name, blob)
         await recordRecentFile({ id, documentId: id, name, size: blob.size, type: 'application/pdf' })
-        showToast('Edited PDF saved on this device.', 'success')
-      } else { downloadBlob(blob, name); showToast('Edited PDF downloaded.', 'success') }
-    } catch (error) { showToast(`Export failed: ${error.message}`, 'error') } finally { setProcessing(false) }
+        if (operation.current === controller) { setSavedItems(snapshot); showToast('Edited PDF saved on this device.', 'success') }
+      } else { downloadBlob(blob, name); setSavedItems(snapshot); showToast('Edited PDF downloaded.', 'success') }
+    } catch (failure) { if (operation.current === controller && failure.name !== 'AbortError' && failure.name !== 'RenderingCancelledException') setError(failure.message || 'Could not export this PDF.') }
+    finally { if (operation.current === controller) { operation.current = null; setBusy(false) } }
+  }
+  const close = () => {
+    if (locked || (dirty && !window.confirm('Close this PDF and discard unsaved edits?'))) return
+    cached.current = null; typingSnapshot.current = null; interaction.current = null
+    setSource(null); setEdits(emptyHistory()); setSelectedId(null); setEditingId(null); setError(''); setPreview(null)
   }
 
-  return <ToolPage toolId="edit-pdf">{!file ? <div className="tool-panel"><DropZone onFiles={loadFile} accept={['application/pdf']}><div className="drop-zone-icon"><Edit3 size={28} /></div><div className="drop-zone-title">Drop a PDF to edit</div><div className="drop-zone-sub">Add text, replace selectable text, and draw shapes</div></DropZone><div className="editor-note"><strong>Editing behavior:</strong> New text remains selectable. Replacing original text rebuilds that page as an image before adding your replacement, so the original text is removed from the downloaded page.</div></div> : <>
-    <div className="editor-document-bar"><div className="editor-file"><FileCheck2 size={17} /><div><strong>{file.name}</strong><small>Original file · changes stay local until saved or downloaded</small></div></div><div className="editor-page-nav"><button className="icon-btn" disabled={currentPage === 1} onClick={() => { setCurrentPage((page) => page - 1); setSelectedId(null) }}>‹</button><span>{currentPage} / {totalPages}</span><button className="icon-btn" disabled={currentPage === totalPages} onClick={() => { setCurrentPage((page) => page + 1); setSelectedId(null) }}>›</button></div><div className="editor-doc-actions"><button className="icon-btn" disabled={!history.length} onClick={undo} title="Undo"><Undo2 size={17} /></button><button className="icon-btn" disabled={!future.length} onClick={redo} title="Redo"><Redo2 size={17} /></button><button className="btn btn-secondary" aria-label="Save locally" onClick={() => exportPdf(true)} disabled={processing}><Save size={16} /><span className="editor-save-label">Save locally</span></button><button className="btn editor-download" onClick={() => exportPdf(false)} disabled={processing}><Download size={16} /> Download</button></div></div>
-    <div ref={scrollRef} className="pdf-editor-scroll" onScroll={(event) => setScrollOffset(event.currentTarget.scrollLeft)}><div ref={workspaceRef} className={`pdf-editor-workspace tool-${activeTool}`} style={{ width: pageSize.width, height: pageSize.height }} onPointerDown={(event) => { if (activeTool !== 'select' && !event.target.closest?.('.editor-overlay')) addOverlay(event); else if (activeTool === 'select' && event.target === workspaceRef.current) setSelectedId(null) }} onPointerMove={moveInteraction} onPointerUp={endInteraction}>
-      <canvas ref={canvasRef} className="pdf-editor-canvas" />{textItems.map((item) => { const replaced = overlays.some((overlay) => overlay.sourceId === item.id); return <button key={item.id} className={`pdf-text-item ${replaced ? 'is-replaced' : ''}`} style={{ left: item.x, top: item.y, width: item.width, height: item.height, fontSize: item.fontSize }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); editOriginalText(item) }}>{item.text}</button> })}{rendering && <div className="editor-rendering"><div className="spinner" /></div>}
-      {overlays.filter((overlay) => overlay.page === currentPage && overlay.type === 'replace').map((overlay) => { const region = overlay.sourceRegion || overlay; return <div className="editor-source-mask" key={`mask-${overlay.id}`} aria-hidden="true" style={{ left: `${region.x * 100}%`, top: `${region.y * 100}%`, width: `${region.width * 100}%`, height: `${region.height * 100}%`, background: overlay.backgroundColor || '#ffffff' }} /> })}
-      {overlays.filter((item) => item.page === currentPage).map((overlay) => <div key={overlay.id} className={`editor-overlay overlay-${overlay.type} ${selectedId === overlay.id ? 'selected' : ''}`} style={{ left: `${overlay.x * 100}%`, top: `${overlay.y * 100}%`, width: `${overlay.width * 100}%`, height: `${overlay.height * 100}%`, color: overlay.color, background: overlay.type === 'rect' ? `${overlay.color}40` : 'transparent', fontSize: overlay.fontSize * pageSize.scale, fontFamily: overlay.fontFamily === 'Times' ? 'Times New Roman, serif' : overlay.fontFamily === 'Courier' ? 'Courier New, monospace' : 'Arial, sans-serif', fontWeight: overlay.bold ? 700 : 400, fontStyle: overlay.italic ? 'italic' : 'normal', textAlign: overlay.align || 'left' }} onPointerDown={(event) => beginInteraction(event, overlay, 'move')} onDoubleClick={(event) => { event.stopPropagation(); if (overlay.type === 'text' || overlay.type === 'replace') { setSelectedId(overlay.id); setEditingId(overlay.id) } }}>
-        {(overlay.type === 'text' || overlay.type === 'replace') && (editingId === overlay.id ? <textarea autoFocus placeholder="Type here" value={overlay.text} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onChange={(event) => updateSelected({ text: event.target.value, height: Math.max(overlay.height, Math.min(1 - overlay.y, event.target.scrollHeight / pageSize.height)) })} onBlur={() => finishEditing(overlay)} /> : <span>{overlay.text || 'Double-click to type'}</span>)}{selectedId === overlay.id && <button className="overlay-resize" aria-label="Resize" onPointerDown={(event) => beginInteraction(event, overlay, 'resize')} />}
-        {selectedId === overlay.id && (overlay.type === 'text' || overlay.type === 'replace') && <div className={`editor-context-toolbar ${overlay.y < .1 ? 'toolbar-below' : ''}`} style={toolbarStyle(overlay)} onPointerDown={(event) => event.stopPropagation()}><span className="toolbar-grip">⠿</span><select value={overlay.fontFamily || 'Helvetica'} aria-label="Font" onChange={(event) => updateSelected({ fontFamily: event.target.value })}><option>Helvetica</option><option>Times</option><option>Courier</option></select><button aria-label="Decrease font size" onClick={() => updateSelected({ fontSize: Math.max(6, overlay.fontSize - 1) })}><Minus size={13} /></button><span>{Math.round(overlay.fontSize)}</span><button aria-label="Increase font size" onClick={() => updateSelected({ fontSize: Math.min(96, overlay.fontSize + 1) })}><Plus size={13} /></button><button aria-label="Bold" className={overlay.bold ? 'active' : ''} onClick={() => updateSelected({ bold: !overlay.bold })}><Bold size={14} /></button><button aria-label="Italic" className={overlay.italic ? 'active' : ''} onClick={() => updateSelected({ italic: !overlay.italic })}><Italic size={14} /></button><input aria-label="Text color" type="color" value={overlay.color} onChange={(event) => updateSelected({ color: event.target.value })} /><button aria-label="Align left" className={overlay.align === 'left' ? 'active' : ''} onClick={() => updateSelected({ align: 'left' })}><AlignLeft size={14} /></button><button aria-label="Align center" className={overlay.align === 'center' ? 'active' : ''} onClick={() => updateSelected({ align: 'center' })}><AlignCenter size={14} /></button><button aria-label="Align right" className={overlay.align === 'right' ? 'active' : ''} onClick={() => updateSelected({ align: 'right' })}><AlignRight size={14} /></button><button aria-label="Delete object" onClick={removeSelected}><Trash2 size={14} /></button></div>}
-      </div>)}
-    </div><div className="editor-bottom-dock"><button className={activeTool === 'select' ? 'active' : ''} onClick={() => setActiveTool('select')}><MousePointer2 size={20} /><span>Edit</span></button><button className={activeTool === 'text' ? 'active' : ''} onClick={() => setActiveTool('text')}><Type size={20} /><span>Text</span></button><button className={activeTool === 'rect' ? 'active' : ''} onClick={() => setActiveTool('rect')}><Square size={20} /><span>Insert</span></button></div><div className="editor-zoom"><button aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(.6, value - .1))}><ZoomOut size={16} /></button><span>{Math.round(zoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(2, value + .1))}><ZoomIn size={16} /></button></div></div>
+  return <ToolPage toolId="edit-pdf"><div className="edit-workspace">
+    <input ref={pdfInput} type="file" accept="application/pdf,.pdf" hidden disabled={locked} onChange={event => { loadFile(Array.from(event.target.files)); event.target.value = '' }} />
+    <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden disabled={locked} onChange={event => { insertImage(Array.from(event.target.files)); event.target.value = '' }} />
+    {!source ? <div className="tool-panel ed-upload"><DropZone onFiles={loadFile} accept={['application/pdf', '.pdf']}><Edit3 size={30} /><div className="drop-zone-title">Choose a PDF to edit</div><div className="drop-zone-sub">Text, images, highlights and shapes</div></DropZone></div> : <>
+      <div className="ed-document-bar"><div className="ed-file"><strong title={source.file.name}>{source.file.name}</strong><span>{source.pdf.numPages} pages{edits.items.length ? ` · ${edits.items.length} edits` : ''}{dirty ? ' · Unsaved' : ''}</span></div><div className="ed-document-actions">
+        <IconButton icon={Upload} label="Change PDF" disabled={locked} onClick={() => pdfInput.current?.click()} />
+        <button className="btn btn-secondary btn-sm" disabled={locked} onClick={() => exportPdf('preview')}><Eye size={15} /><span>Preview</span></button>
+        <button className="btn btn-secondary btn-sm ed-save" disabled={locked} onClick={() => exportPdf('save')}><Save size={15} /><span>Save locally</span></button>
+        <button className="btn btn-primary btn-sm editor-download" disabled={locked} onClick={() => exportPdf('download')}><Download size={16} /> Download PDF</button>
+        <IconButton icon={X} label="Close PDF" disabled={locked} onClick={close} />
+      </div></div>
 
-    {processing && <ProgressBar value={70} label="Exporting edited PDF" />}<div className="editor-footer-actions"><span>All edits stay in this browser.</span><button className="btn btn-secondary" onClick={() => { setFile(null); setPdfDoc(null); setOverlays([]) }}><Trash2 size={16} /> Close document</button></div>
-  </>}</ToolPage>
+      <div className="ed-toolbar" role="toolbar" aria-label="PDF editing tools"><div className="ed-tools">{tools.map(([value, Icon, label]) => <button key={value} disabled={locked} aria-pressed={tool === value} onClick={() => selectTool(value)} title={label}><Icon size={17} /><span>{label}</span></button>)}<button disabled={locked || !ready} onClick={() => { finishTyping(); imageInput.current?.click() }}><ImagePlus size={17} /><span>Image</span></button></div><div className="ed-history">
+        <IconButton icon={Undo2} label="Undo (Ctrl+Z)" disabled={locked || !edits.past.length} onClick={undo} />
+        <IconButton icon={Redo2} label="Redo (Ctrl+Shift+Z)" disabled={locked || !edits.future.length} onClick={redo} />
+        <IconButton icon={RotateCcw} label="Reset all edits" disabled={locked || !edits.items.length} onClick={() => { finishTyping(); commit([]); setSelectedId(null) }} />
+      </div></div>
+
+      <fieldset className="ed-properties" disabled={locked}>
+        {textProperties && <><select className="form-select" aria-label="Font" value={properties.fontFamily || config.fontFamily} onChange={event => changeProperty({ fontFamily: event.target.value })}><option value="Helvetica">Sans serif</option><option value="Times">Serif</option><option value="Courier">Monospace</option></select><label className="ed-size">Size<input aria-label="Font size" type="number" min={6} max={144} value={properties.fontSize} onChange={event => { if (event.target.value) changeProperty({ fontSize: clamp(Number(event.target.value), 6, 144) }) }} /></label><IconButton icon={Bold} label="Bold" aria-pressed={!!properties.bold} onClick={() => changeProperty({ bold: !properties.bold })} /><IconButton icon={Italic} label="Italic" aria-pressed={!!properties.italic} onClick={() => changeProperty({ italic: !properties.italic })} /><span className="ed-separator" />{[['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]].map(([align, Icon]) => <IconButton key={align} icon={Icon} label={`Align ${align}`} aria-pressed={properties.align === align} onClick={() => changeProperty({ align })} />)}</>}
+        {selected?.type !== 'image' && <label className="ed-color">Color<input aria-label="Object color" type="color" value={properties.color} onChange={event => changeProperty({ color: event.target.value })} /></label>}
+        {shapeProperties && <><label className="ed-size">Opacity<input aria-label="Opacity percent" type="number" min={0} max={100} value={Math.round((properties.opacity ?? 1) * 100)} onChange={event => changeProperty({ opacity: clamp(Number(event.target.value), 0, 100) / 100 })} /></label>{objectType !== 'highlight' && <label className="ed-size">Stroke<input aria-label="Stroke width" type="number" min={.5} max={20} step={.5} value={properties.strokeWidth} onChange={event => { if (event.target.value) changeProperty({ strokeWidth: clamp(Number(event.target.value), .5, 20) }) }} /></label>}{objectType === 'rect' && <label className="ed-check"><input type="checkbox" checked={!!properties.filled} onChange={event => changeProperty({ filled: event.target.checked })} /> Fill</label>}</>}
+        {selected?.type === 'image' && <label className="ed-check"><input type="checkbox" checked={selected.lockAspect !== false} onChange={event => changeProperty({ lockAspect: event.target.checked })} /> Keep proportions</label>}
+        <div className="ed-object-actions"><IconButton icon={Copy} label="Duplicate object (Ctrl+D)" disabled={!selected} onClick={duplicate} /><IconButton icon={Layers} label="Bring object to front" disabled={!selected} onClick={() => commit(items => [...items.filter(item => item.id !== selectedId), selected])} /><IconButton icon={Trash2} label="Delete selected object" disabled={!selected} onClick={removeSelected} /></div>
+      </fieldset>
+
+      <div className="ed-pagebar"><IconButton icon={showPages ? PanelLeftClose : PanelLeftOpen} label={showPages ? 'Hide page thumbnails' : 'Show page thumbnails'} onClick={() => setShowPages(value => !value)} /><div className="ed-page-navigation"><IconButton icon={ChevronLeft} label="Previous page" disabled={locked || page === 1} onClick={() => changePage(page - 1)} /><label>Page <input aria-label="Page number" inputMode="numeric" value={pageInput} disabled={locked} onChange={event => setPageInput(event.target.value.replace(/\D/g, ''))} onBlur={() => { changePage(pageInput); setPageInput(String(clamp(Number(pageInput) || 1, 1, source.pdf.numPages))) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /> of {source.pdf.numPages}</label><IconButton icon={ChevronRight} label="Next page" disabled={locked || page === source.pdf.numPages} onClick={() => changePage(page + 1)} /></div><div className="ed-zoom"><IconButton icon={ZoomOut} label="Zoom out" disabled={locked || zoom <= .5} onClick={() => setZoom(value => Math.max(.5, +(value - .25).toFixed(2)))} /><button className="ed-fit" disabled={locked} onClick={() => setZoom(1)} title="Fit width">{Math.round(zoom * 100)}%</button><IconButton icon={ZoomIn} label="Zoom in" disabled={locked || zoom >= 2.5} onClick={() => setZoom(value => Math.min(2.5, +(value + .25).toFixed(2)))} /></div></div>
+
+      <div className={`ed-body${showPages ? ' with-pages' : ''}`}>
+        {showPages && <nav className="ed-pages" aria-label="PDF pages">{Array.from({ length: source.pdf.numPages }, (_, index) => { const num = index + 1, count = edits.items.filter(item => item.page === num).length; return <button key={num} className={page === num ? 'active' : ''} aria-label={`Page ${num}${count ? `, ${count} edits` : ''}`} aria-current={page === num ? 'page' : undefined} disabled={locked} onClick={() => changePage(num)}><PdfPageThumbnail pdf={source.pdf} page={{ num, rotation: 0 }} /><span>{num}{count > 0 && <b>{count}</b>}</span></button> })}</nav>}
+        <div className="ed-canvas-area"><div ref={scroller} className="ed-scroll"><div ref={stage} className={`ed-stage tool-${tool}`} style={{ width: view.width, height: view.height }} onPointerDown={stageDown} onPointerMove={moveInteraction} onPointerUp={() => endInteraction()} onPointerCancel={() => endInteraction(true)}>
+          <canvas ref={canvas} className="pdf-editor-canvas" role="img" aria-label={`PDF page ${page}`} />
+          {ready && <>{tool === 'edit' && view.textItems.filter(item => !edits.items.some(overlay => overlay.sourceId === item.id)).map(item => <button className="ed-original-text" key={item.id} aria-label={`Edit text: ${item.text}`} title={item.text} style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%` }} onPointerDown={event => event.stopPropagation()} onClick={() => editOriginal(item)} />)}
+          {edits.items.filter(item => item.page === page && item.type === 'replace').map(item => <div key={`mask-${item.id}`} className="ed-mask" style={{ left: `${item.sourceRegion.x * 100}%`, top: `${item.sourceRegion.y * 100}%`, width: `${item.sourceRegion.width * 100}%`, height: `${item.sourceRegion.height * 100}%`, background: item.backgroundColor }} />)}
+          {edits.items.filter(item => item.page === page).map(item => <div key={item.id} className={`ed-object ed-${item.type}${selectedId === item.id ? ' selected' : ''}`} tabIndex={0} role="group" aria-label={`${item.type === 'replace' ? 'Replacement text' : item.type} object`} style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%`, color: item.color, fontSize: item.fontSize ? item.fontSize * view.scale : undefined, fontFamily: item.fontFamily === 'Times' ? '"Times New Roman", serif' : item.fontFamily === 'Courier' ? '"Courier New", monospace' : 'Arial, sans-serif', fontWeight: item.bold ? 700 : 400, fontStyle: item.italic ? 'italic' : 'normal', textAlign: item.align || 'left' }} onFocus={() => setSelectedId(item.id)} onPointerDown={event => startInteraction(event, item, 'move')} onDoubleClick={event => { event.stopPropagation(); if (['text', 'replace'].includes(item.type)) { setSelectedId(item.id); setEditingId(item.id); setTool('select') } }}>
+            {['text', 'replace'].includes(item.type) && (editingId === item.id ? <textarea aria-label="Text content" autoFocus placeholder="Type here" value={item.text} onFocus={() => { typingSnapshot.current = editsRef.current.items }} onPointerDown={event => event.stopPropagation()} onChange={event => { const text = event.target.value, height = Math.min(1 - item.y, Math.max(item.height, event.target.scrollHeight / view.height)); transient(items => items.map(entry => entry.id === item.id ? { ...entry, text, height } : entry)) }} onBlur={() => { finishTyping(); if (!editsRef.current.items.find(entry => entry.id === item.id)?.text.trim() && item.type === 'text') commit(items => items.filter(entry => entry.id !== item.id)) }} /> : <span className="ed-text-content">{item.text}</span>)}
+            {item.type === 'image' && <img src={item.dataUrl} alt={item.label || 'Inserted image'} draggable={false} />}
+            {['rect', 'highlight', 'line'].includes(item.type) && <svg className="ed-shape" width="100%" height="100%" aria-hidden="true" overflow="visible">{item.type === 'line' ? <line x1="0" y1={item.reverse ? '100%' : '0'} x2="100%" y2={item.reverse ? '0' : '100%'} stroke={item.color} strokeWidth={(item.strokeWidth || 2) * view.scale} opacity={item.opacity} /> : <rect width="100%" height="100%" fill={item.filled ? item.color : 'none'} stroke={item.type === 'highlight' ? 'none' : item.color} strokeWidth={(item.strokeWidth || 2) * view.scale} opacity={item.opacity} />}</svg>}
+            {selectedId === item.id && <button className="ed-resize" aria-label="Resize object" onPointerDown={event => startInteraction(event, item, 'resize')} />}
+          </div>)}</>}
+        </div></div>{(!ready || locked) && <div className="ed-rendering" role="status"><LoaderCircle size={19} className="ed-spin" />{loading ? 'Opening PDF…' : imageLoading ? 'Adding image…' : busy ? 'Preparing PDF…' : rendering ? 'Loading page…' : <button className="btn btn-secondary btn-sm" onClick={() => setRetry(value => value + 1)}>Reload page</button>}</div>}</div>
+      </div>
+      <div className="ed-status"><span>{tool === 'text' ? 'Click the page to add text.' : tool === 'edit' ? ready && !view.textItems.length ? 'No selectable text on this page.' : 'Click original text to replace it.' : ['rect', 'line', 'highlight'].includes(tool) ? 'Drag on the page to draw.' : selected ? 'Drag to move · corner to resize' : 'Select a tool or an added object.'}</span>{(tool === 'edit' || hasReplacement) && <span>Text replacement flattens the background on affected pages.</span>}</div>
+    </>}
+    {loading && !source && <p className="ed-loading" role="status"><LoaderCircle size={18} className="ed-spin" /> Opening PDF…</p>}
+    {busy && <div className="ed-export-progress"><ProgressBar value={progress} label={status} /><button className="btn btn-secondary btn-sm" onClick={() => { operation.current?.abort(); operation.current = null; setBusy(false) }}><X size={14} /> Cancel</button></div>}
+    {error && <p className="ed-error" role="alert">{error}</p>}
+    <Modal open={!!preview} onClose={() => setPreview(null)} title="Edited PDF" maxWidth={1000} footer={<button className="btn btn-primary" onClick={() => { downloadBlob(preview, `edited-${source.file.name}`); setSavedItems(edits.items) }}><Download size={16} /> Download PDF</button>}><DocumentPdfPreview blob={preview} initialPage={page} heading="Exported PDF" /></Modal>
+  </div></ToolPage>
 }

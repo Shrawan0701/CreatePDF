@@ -1,5 +1,5 @@
 import { createElement as h } from 'react';
-import { TOOLS } from '../data/tools.js';
+import { VISIBLE_TOOLS as TOOLS } from '../data/tools.js';
 import { FEATURED_SEO_TOOLS, TOOL_GUIDES } from './toolGuides.js';
 
 const link = (Component, tool) => h(Component, { key: tool.id, ...(Component === 'a' ? { href: tool.route } : { to: tool.route }) }, tool.name);
