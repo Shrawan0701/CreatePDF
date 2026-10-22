@@ -79,7 +79,7 @@ async function rebuildVisiblePages(file, { dpi, signal, onProgress }) {
     let sourceSignatureCount = 0;
     try { sourceSignatureCount = (await pdf.getSignatures())?.length || 0; } catch { /* A damaged signature may itself be unreadable. */ }
     const output = await PDFDocument.create();
-    output.setTitle('Recovered document'); output.setCreator('CreatePDF.si');
+    output.setTitle('Recovered document'); output.setCreator('CreatePDF.tech');
     const recoveredPages = [], skippedPages = [];
     for (let number = 1; number <= pdf.numPages; number++) {
       check(signal); await tick();

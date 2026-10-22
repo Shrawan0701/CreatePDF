@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { Download, FileInput, FileOutput } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import { PdfImageExtractor } from '../../components/PdfImageExtractor'
@@ -64,17 +64,10 @@ async function workbookToPdf(workbook, selected, options) {
 function ImportTool({ toolId, accept, convert, note, retainDownload = false, successMessage = 'Conversion completed locally.' }) {
   const { showToast } = useApp(); const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const [progress, setProgress] = useState(0); const [result, setResult] = useState(null)
   const [status, setStatus] = useState('Converting document')
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    if (!busy) return
-    const started = Date.now()
-    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
-    return () => clearInterval(timer)
-  }, [busy])
   const updateProgress = (value, label) => { setProgress(value); if (label) setStatus(label) }
   const choose = (selected) => { if (busy) return; setFile(selected); setResult(null) }
-  const run = async () => { setBusy(true); setResult(null); setProgress(null); setElapsed(0); setStatus('Preparing document'); try { const converted = await convert(file, updateProgress); if (retainDownload) setResult(converted); downloadBlob(converted.blob, converted.name); showToast(successMessage, 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
-  return <ToolPage toolId={toolId}><div className="tool-panel"><DropZone accept={accept} onFiles={([selected]) => choose(selected)}><FileInput size={30} /><div className="drop-zone-title">Choose source document</div><div className="drop-zone-sub">{note}</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => choose(null)} /></div>}</div>{busy && <ProgressBar value={progress} label={`${status}${elapsed ? ` (${elapsed}s)` : ''}`} />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Convert and download</button>{result && <div className="tool-panel" style={{ marginTop: 16 }}><p role="status">Your PDF is ready. If it did not download automatically, tap below to save it.</p><button className="btn btn-primary" onClick={() => downloadBlob(result.blob, result.name)}><Download size={17} /> Download PDF</button></div>}</ToolPage>
+  const run = async () => { setBusy(true); setResult(null); setProgress(0); setStatus('Preparing document'); try { const converted = await convert(file, updateProgress); if (retainDownload) setResult(converted); downloadBlob(converted.blob, converted.name); showToast(successMessage, 'success') } catch (error) { showToast(error.message, 'error') } finally { setBusy(false) } }
+  return <ToolPage toolId={toolId}><div className="tool-panel"><DropZone accept={accept} onFiles={([selected]) => choose(selected)}><FileInput size={30} /><div className="drop-zone-title">Choose source document</div><div className="drop-zone-sub">{note}</div></DropZone>{file && <div style={{ marginTop: 10 }}><FileItem file={file} onRemove={() => choose(null)} /></div>}</div>{busy && <ProgressBar value={progress} label={status} />}<button className="btn btn-primary btn-lg" disabled={!file || busy} onClick={run}><Download size={17} /> Convert and download</button>{result && <div className="tool-panel" style={{ marginTop: 16 }}><p role="status">Your PDF is ready. If it did not download automatically, tap below to save it.</p><button className="btn btn-primary" onClick={() => downloadBlob(result.blob, result.name)}><Download size={17} /> Download PDF</button></div>}</ToolPage>
 }
 
 export function WordToPdf() { return <ImportTool toolId="word-to-pdf" accept={['.docx']} note="Your file is sent to this app’s server and deleted after conversion." retainDownload successMessage="Conversion completed." convert={async (file, progress) => ({ blob: await wordToPdf(file, progress), name: file.name.replace(/\.docx$/i, '.pdf') })} /> }

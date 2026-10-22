@@ -118,7 +118,7 @@ export async function createHandwritingPhotoPdf(pages, options, { signal, title 
   if (!pages.length) throw new Error('Add a handwriting image first.')
   check(signal)
   const { PDFDocument, rgb, pushGraphicsState, popGraphicsState, rectangle, clip, endPath } = await import('pdf-lib')
-  const pdf = await PDFDocument.create(); pdf.setTitle(title); pdf.setCreator('CreatePDF.si')
+  const pdf = await PDFDocument.create(); pdf.setTitle(title); pdf.setCreator('CreatePDF.tech')
   const settings = options.quality === 'small' ? { dpi: 150, quality: .8, type: 'image/jpeg' } : options.quality === 'lossless' ? { dpi: 300, type: 'image/png' } : { dpi: 240, quality: .94, type: 'image/jpeg' }
   for (let index = 0; index < pages.length; index++) {
     check(signal); onProgress?.(index / pages.length * 94, `Preparing page ${index + 1} of ${pages.length}…`); await tick()

@@ -195,7 +195,7 @@ try {
 const document = await PDFDocument.load(raw, { updateMetadata: false })
 if (document.getPageCount() !== 12) throw new Error(`Expected 12 pages, generated ${document.getPageCount()}`)
 document.setTitle('Northstar Project Handbook - Complete Bookmark Test')
-document.setAuthor('CreatePDF Sample Library')
+document.setAuthor('CreatePDF.tech Sample Library')
 document.setSubject('Fictional twelve-page report with three bookmark levels, tables, images, links, and interactive form fields')
 document.setKeywords(['sample PDF', 'bookmark splitting', 'nested outline', 'text markers', 'forms', 'tables', 'clickable links'])
 document.setLanguage('en-US')

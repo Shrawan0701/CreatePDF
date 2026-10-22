@@ -164,7 +164,7 @@ function Settings() {
   useEffect(() => { refreshStorage() }, [])
 
   const clearData = async () => {
-    if (!window.confirm('Delete all locally stored CreatePDF.si data on this browser?')) return
+    if (!window.confirm('Delete all locally stored CreatePDF.tech data on this browser?')) return
     await clearAllData()
     showToast('Local application data cleared.', 'success')
     window.location.reload()

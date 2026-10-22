@@ -81,7 +81,7 @@ function wrap(value, font, size, maxWidth) {
 async function createReport(overlap) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(overlap ? 'Repair sample - overlapping selectable text' : 'Repair sample - clean reference');
-  pdf.setAuthor('CreatePDF.si'); pdf.setCreator('CreatePDF.si');
+  pdf.setAuthor('CreatePDF.tech'); pdf.setCreator('CreatePDF.tech');
   pdf.setSubject('Fictional project report for manually comparing repair modes');
   const regular = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   for (let index = 0; index < sections.length; index++) {

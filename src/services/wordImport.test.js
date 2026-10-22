@@ -12,7 +12,7 @@ describe('mobile Word conversion client', () => {
    'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
    Accept: 'application/vnd.createpdf.powerpoint-stream, application/pdf',
   } }))
-  expect(progress).toHaveBeenCalledWith(null, 'Rendering slides')
+  expect(progress).toHaveBeenCalledWith(60, 'Rendering slides')
  })
  it('reads real status events and a PDF split across arbitrary network chunks', async () => {
   const pdf = new TextEncoder().encode('%PDF-1.7\nfixture')
@@ -25,9 +25,22 @@ describe('mobile Word conversion client', () => {
    controller.close()
   } }), { headers: { 'Content-Type': 'application/vnd.createpdf.word-stream' } })))
   expect(await (await wordToPdf(new Blob(), progress)).text()).toBe('%PDF-1.7\nfixture')
-  expect(progress).toHaveBeenCalledWith(null, 'Converting document')
+  expect(progress).toHaveBeenCalledWith(60, 'Converting document')
   expect(progress).toHaveBeenLastCalledWith(100, 'PDF ready')
   expect(progress.mock.calls.some(([value]) => value > 0 && value < 100)).toBe(true)
+  const percentages = progress.mock.calls.map(([value]) => value)
+  expect(percentages.every(value => Number.isFinite(value) && value >= 0 && value <= 100)).toBe(true)
+  expect(percentages).toEqual([...percentages].sort((a, b) => a - b))
+ })
+ it('keeps stage percentages moving forward even when status labels arrive late', async () => {
+  const progress = vi.fn(), pdf = '%PDF-1.7\nfixture'
+  const events = ['Upload complete. Waiting for conversion slot', 'Preparing document', 'Starting conversion engine', 'Converting document', 'Preparing document'].map(label => JSON.stringify({ type: 'progress', label }))
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(`${events.join('\n')}\n${JSON.stringify({ type: 'pdf', length: pdf.length })}\n${pdf}`, { headers: { 'Content-Type': 'application/vnd.createpdf.word-stream' } })))
+  await wordToPdf(new Blob(), progress)
+  const values = progress.mock.calls.map(([value]) => value)
+  expect(values).toEqual([...values].sort((a, b) => a - b))
+  expect(progress).toHaveBeenCalledWith(60, 'Preparing document')
+  expect(progress).toHaveBeenLastCalledWith(100, 'PDF ready')
  })
  it('rejects streamed errors and incomplete PDF downloads without reporting completion', async () => {
   const progress = vi.fn()

@@ -10,7 +10,7 @@ export async function createGstInvoicePdf(invoice) {
   const { PDFDocument, StandardFonts, rgb } = await getPdfLib();
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${invoiceTitle(invoice)} ${invoice.invoiceNumber}`);
-  pdf.setAuthor(invoice.seller.legalName || invoice.seller.tradeName); pdf.setCreator('CreatePDF.si');
+  pdf.setAuthor(invoice.seller.legalName || invoice.seller.tradeName); pdf.setCreator('CreatePDF.tech');
   const regular = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   // Embed supported text as text. Other scripts use browser-shaped text images
   // rather than replacing international names with question marks.

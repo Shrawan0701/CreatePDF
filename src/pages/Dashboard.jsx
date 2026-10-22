@@ -7,9 +7,80 @@ import { RecentFilesPanel } from '../components/Layout';
 import SavedDocumentsPanel from '../components/SavedDocumentsPanel';
 import { HomeGuide } from '../seo/GuideContent';
 
-const POPULAR = ['pdf-translator', 'images-to-pdf', 'chat-with-pdf', 'pdf-to-word'];
 const FILTERS = ['All tools', 'Favorites', ...Object.values(TOOL_CATEGORIES)];
-const ORDERED_TOOLS = Object.values(TOOL_CATEGORIES).flatMap(category => TOOLS.filter(tool => tool.category === category));
+// Curated for everyday document work, rather than measured usage statistics.
+// Categories stay independent so the full directory can mix related tasks.
+const EVERYDAY_TOOL_ORDER = [
+  'word-to-pdf',
+  'images-to-pdf',
+  'pdf-to-word',
+  'merge-pdf',
+  'compress-pdf',
+  'split-pdf',
+  'pdf-to-jpg',
+  'edit-pdf',
+  'sign-pdf',
+  'excel-to-pdf',
+  'powerpoint-to-pdf',
+  'pdf-to-excel',
+  'scan-document',
+  'organize-pages',
+  'rotate-pdf',
+  'fill-form',
+  'crop-resize',
+  'remove-password',
+  'encrypt-pdf',
+  'unlock-pdf',
+  'pdf-to-ppt',
+  'extract-text',
+  'add-watermark',
+  'page-numbers',
+  'resume-builder',
+  'create-pdf',
+  'photo-to-passport',
+  'pdf-translator',
+  'pdf-summarizer',
+  'chat-with-pdf',
+  'redact-pdf',
+  'extract-images',
+  'flatten-pdf',
+  'headers-footers',
+  'html-to-pdf',
+  'gst-invoice',
+  'repair-pdf',
+  'n-up',
+  'text-to-handwriting',
+  'handwriting-to-pdf',
+  'pdf-to-handwriting',
+  'csv-to-pdf',
+  'markdown-to-pdf',
+  'ebook-to-pdf',
+  'pdf-to-epub',
+  'pdf-to-html',
+  'pos-billing',
+  'invoice-extractor',
+  'pdf-to-zip',
+  'thumbmark',
+  'pdf-workflow',
+  'whiteboard',
+  'edit-metadata',
+  'auto-redact',
+  'privacy-scanner',
+  'flip-mirror',
+  'invert-colors',
+  'split-by-size',
+  'alternate-mix',
+  'split-by-text',
+  'split-by-bookmarks',
+  'split-in-half',
+  'bates-numbering',
+  'fingerprint',
+];
+const TOOL_RANK = new Map(EVERYDAY_TOOL_ORDER.map((id, index) => [id, index]));
+// Unranked additions remain visible at the end until their position is curated.
+const ORDERED_TOOLS = [...TOOLS].sort((a, b) =>
+  (TOOL_RANK.get(a.id) ?? Infinity) - (TOOL_RANK.get(b.id) ?? Infinity));
+const ESSENTIAL_TOOLS = ORDERED_TOOLS.slice(0, 4);
 
 export default function Dashboard() {
   const { starredTools, toggleStarTool } = useApp();
@@ -32,16 +103,16 @@ export default function Dashboard() {
         <div className="document-scene" aria-hidden="true">
           <div className="scene-orbit" />
           <div className="paper paper-back"><div className="paper-mini-logo" /><div className="paper-line" /><div className="paper-line short" /></div>
-          <div className="paper paper-front"><div className="paper-top"><span className="paper-mini-logo" /><span>DOCUMENT / 001</span></div><div className="paper-heading">Good things.<br />All together.</div><div className="paper-line" /><div className="paper-line" /><div className="paper-line short" /><div className="paper-chart"><i /><i /><i /><i /><i /><i /></div><div className="paper-bottom"><span>Made with CreatePDF</span><Check size={12} /></div></div>
+          <div className="paper paper-front"><div className="paper-top"><span className="paper-mini-logo" /><span>DOCUMENT / 001</span></div><div className="paper-heading">Good things.<br />All together.</div><div className="paper-line" /><div className="paper-line" /><div className="paper-line short" /><div className="paper-chart"><i /><i /><i /><i /><i /><i /></div><div className="paper-bottom"><span>Made with CreatePDF.tech</span><Check size={12} /></div></div>
           <div className="scene-label"><span><Check size={14} /></span> Ready for what’s next.</div>
           <div className="scene-file"><FileText size={17} /><span>your-next-big-thing.pdf</span></div>
         </div>
       </section>
       <section className="popular-section" aria-labelledby="popular-title">
         <div className="section-heading"><h2 id="popular-title">A good place to start</h2><span>The everyday essentials</span></div>
-        <div className="essential-grid">{POPULAR.map((id, i) => {
-          const tool = TOOLS.find(t => t.id === id); const Icon = tool.icon;
-          return <Link key={id} to={tool.route} className="essential-card"><div className="essential-top"><span className={`essential-icon tone-${i}`}><Icon size={22} strokeWidth={1.6} /></span><ArrowUpRight className="essential-arrow" size={18} /></div><h3>{tool.name}</h3><p>{tool.description}</p></Link>;
+        <div className="essential-grid">{ESSENTIAL_TOOLS.map((tool, i) => {
+          const Icon = tool.icon;
+          return <Link key={tool.id} to={tool.route} className="essential-card"><div className="essential-top"><span className={`essential-icon tone-${i}`}><Icon size={22} strokeWidth={1.6} /></span><ArrowUpRight className="essential-arrow" size={18} /></div><h3>{tool.name}</h3><p>{tool.description}</p></Link>;
         })}</div>
       </section>
       <div className="local-promise"><div className="promise-icon"><ShieldCheck size={21} /></div><div><strong>Your files. Your device. Your business.</strong><p>Core PDF tools run on your device. AI tools send extracted text to AI when you use them.</p></div><span className="local-label"><span className="status-dot" /> LOCAL BY DEFAULT</span></div>
@@ -57,7 +128,7 @@ export default function Dashboard() {
       </section>
       <HomeGuide LinkComponent={Link} />
       <section id="documents" className="documents-section"><div className="eyebrow">PICK UP WHERE YOU LEFT OFF</div><SavedDocumentsPanel /><RecentFilesPanel /></section>
-      <footer className="workspace-footer"><Link to="/" className="footer-wordmark">createpdf<span>.si</span></Link><p>A little less busywork. A little more possibility.</p><Link to="/settings">Preferences <ArrowUpRight size={13} /></Link></footer>
+      <footer className="workspace-footer"><Link to="/" className="footer-wordmark">createpdf<span>.tech</span></Link><div className="footer-copy"><p>A little less busywork. A little more possibility.</p><p className="footer-contact">Have a feature suggestion, a new tool request, or a bug to report? Contact us at <a href="mailto:createpdf.tech@gmail.com">createpdf.tech@gmail.com</a>.</p></div><Link to="/settings">Preferences <ArrowUpRight size={13} /></Link></footer>
     </div>
   );
 }

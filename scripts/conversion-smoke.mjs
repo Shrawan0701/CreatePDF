@@ -252,7 +252,7 @@ try {
   await invoiceDownload.saveAs(invoicePath)
   const invoicePdf = await getDocument({ data: new Uint8Array(await readFile(invoicePath)) }).promise
   const invoiceText = (await (await invoicePdf.getPage(1)).getTextContent()).items.map((item) => item.str).join(' ')
-  if (!invoiceText.includes('BILL OF SUPPLY') || !invoiceText.includes('आम') || invoiceText.includes('CreatePDF.si')) throw new Error('Invoice export lost the selected type, Unicode text, or added branding')
+  if (!invoiceText.includes('BILL OF SUPPLY') || !invoiceText.includes('आम') || invoiceText.includes('CreatePDF.tech')) throw new Error('Invoice export lost the selected type, Unicode text, or added branding')
 
   await browserPage.goto(`${baseUrl}/pos-billing`, { waitUntil: 'networkidle' })
   await browserPage.getByRole('button', { name: 'Product', exact: true }).click()

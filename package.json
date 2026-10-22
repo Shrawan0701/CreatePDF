@@ -19,6 +19,7 @@
     "smoke:csv": "node scripts/csv-preview-smoke.mjs",
     "smoke:ebook": "node scripts/ebook-preview-smoke.mjs",
     "smoke:pdf-word": "node scripts/pdf-word-smoke.mjs",
+    "smoke:pdf-word-languages": "node scripts/pdf-word-multilingual-smoke.mjs",
     "smoke:pdf-html": "node scripts/pdf-html-smoke.mjs",
     "smoke:pdf-epub": "node scripts/pdf-epub-smoke.mjs",
     "smoke:alternate-mix": "node scripts/alternate-mix-smoke.mjs",

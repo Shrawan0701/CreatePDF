@@ -6,7 +6,7 @@ try {
   await page.setContent(`<html><body style="margin:0"><svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
     <rect width="1200" height="630" fill="#f7f9f5"/><rect y="614" width="1200" height="16" fill="#327968"/>
     <rect x="72" y="64" width="54" height="54" rx="14" fill="#327968"/><g stroke="white" fill="none" stroke-width="2.5"><path d="M88 78h14l10 10v18H88z"/><path d="M102 78v12h10M94 97h12M100 93v10"/></g>
-    <text x="142" y="103" font-family="Arial,sans-serif" font-size="37" font-weight="700" fill="#252f2a">createpdf<tspan fill="#738078">.si</tspan></text>
+    <text x="142" y="103" font-family="Arial,sans-serif" font-size="37" font-weight="700" fill="#252f2a">createpdf<tspan fill="#738078">.tech</tspan></text>
     <text x="72" y="252" font-family="Arial,sans-serif" font-size="70" font-weight="700" fill="#252f2a">Free PDF tools.</text>
     <text x="72" y="336" font-family="Arial,sans-serif" font-size="70" font-weight="700" fill="#327968">Less busywork.</text>
     <text x="76" y="408" font-family="Arial,sans-serif" font-size="26" fill="#64736b">Convert · Merge · Compress · Edit · Sign</text>

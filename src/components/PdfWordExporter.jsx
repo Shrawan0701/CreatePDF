@@ -41,6 +41,6 @@ export function PdfWordExporter() {
     {error && <p className="pdf-preview-error" role="alert">{error}</p>}
     {busy && <ProgressBar value={progress} label="Reconstructing Word document" />}
     <button className="btn btn-primary btn-lg create-download" disabled={!file || busy} onClick={run}><Download size={17} />{busy ? 'Converting…' : 'Download DOCX'}</button>
-    {result && <div className="word-export-result" role="status"><strong>Word document ready</strong><p>{result.pages} {result.pages === 1 ? 'page' : 'pages'} · {result.tables} detected tables · {result.images} extracted images</p>{result.scannedPages > 0 && <p>{result.scannedPages} scanned {result.scannedPages === 1 ? 'page was' : 'pages were'} preserved as images.</p>}</div>}
+    {result && <div className="word-export-result" role="status"><strong>Word document ready</strong><p>{result.pages} {result.pages === 1 ? 'page' : 'pages'} · {result.tables} detected tables · {result.images} extracted images</p>{result.scannedPages > 0 && <p>{result.scannedPages} scanned {result.scannedPages === 1 ? 'page was' : 'pages were'} preserved as images.</p>}{result.textReviewPages > 0 && <p>Some text in the source PDF has incomplete character mappings. Check the converted text against the original. Choose “Keep page appearance” if you need an exact visual copy.</p>}</div>}
   </div><DocumentPdfPreview blob={file} empty={!file} emptyLabel="Choose a PDF to preview" heading="Source PDF" readyLabel="Original pages before conversion" /></div></ToolPage>
 }

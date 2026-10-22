@@ -6,7 +6,7 @@ export async function createInvoiceExtractionPdf(invoice, { sourceName = 'Docume
   const { PDFDocument, StandardFonts, rgb } = await getPdfLib()
   const pdf = await PDFDocument.create()
   pdf.setTitle(`Extracted bill details - ${invoice.invoiceNumber || sourceName}`)
-  pdf.setCreator('CreatePDF.si')
+  pdf.setCreator('CreatePDF.tech')
   const regular = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold)
   await document.fonts.ready
   const canvas = document.createElement('canvas'), context = canvas.getContext('2d')

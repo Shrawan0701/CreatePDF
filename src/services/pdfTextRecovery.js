@@ -131,7 +131,7 @@ function wrapLine(text, writer, size, maxWidth) {
 
 export async function recoverReadableText(source, { signal, onProgress, textOrder = 'content' }) {
   const output = await PDFDocument.create();
-  output.setTitle('Recovered readable text'); output.setCreator('CreatePDF.si');
+  output.setTitle('Recovered readable text'); output.setCreator('CreatePDF.tech');
   const writer = await makeTextWriter(output);
   const recoveredPages = [], skippedPages = [], pageSources = [];
   let duplicateRuns = 0, recoveredCharacters = 0, sourceSignatureCount = 0;

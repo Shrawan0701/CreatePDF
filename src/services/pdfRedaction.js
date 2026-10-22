@@ -33,7 +33,7 @@ export async function createRedactedPdf(source, regions, { dpi = 200, signal, on
   // content streams, forms, attachments, layers, annotations or metadata.
   // Painting over an original PDF stream would leave recoverable information.
   const output = await PDFDocument.create()
-  output.setTitle('Redacted document'); output.setCreator('CreatePDF.si')
+  output.setTitle('Redacted document'); output.setCreator('CreatePDF.tech')
   for (let number = 1; number <= source.pdf.numPages; number++) {
     check(signal); onProgress?.((number - 1) / source.pdf.numPages * 94, `Redacting page ${number} of ${source.pdf.numPages}…`); await tick()
     const page = await source.pdf.getPage(number), native = page.getViewport({ scale: 1 })

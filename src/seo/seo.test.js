@@ -15,7 +15,7 @@ describe('route SEO coverage', () => {
     for (const tool of TOOLS) {
       const seo = getPageSeo(tool.route);
       expect(TOOL_GUIDES[tool.id][1]).toHaveLength(3);
-      expect(seo.canonical).toBe(`https://createpdf.si${tool.route}`);
+      expect(seo.canonical).toBe(`https://createpdf.tech${tool.route}`);
       expect(seo.indexable).toBe(true);
       expect(seo.description.length).toBeLessThanOrEqual(165);
       expect(renderToStaticMarkup(createElement(ToolGuide, { tool }))).toContain(`How to use ${tool.name.replaceAll('&', '&amp;')}`);
@@ -26,7 +26,7 @@ describe('route SEO coverage', () => {
   it('keeps settings and unknown routes out of search, and strips query/fragment variants', () => {
     expect(getPageSeo('/settings').robots).toContain('noindex');
     expect(getPageSeo('/does-not-exist').indexable).toBe(false);
-    expect(getPageSeo('/merge-pdf/?ref=test#preview').canonical).toBe('https://createpdf.si/merge-pdf');
+    expect(getPageSeo('/merge-pdf/?ref=test#preview').canonical).toBe('https://createpdf.tech/merge-pdf');
     expect(INDEXABLE_PATHS).not.toContain('/settings');
   });
   it('has a Vercel HTML rewrite for each app route without rewriting API functions or assets', () => {

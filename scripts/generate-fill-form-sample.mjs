@@ -7,7 +7,7 @@ import { PDFDocument, PDFHexString, PDFName, PDFString, StandardFonts, rgb } fro
 const pdf = await PDFDocument.create(), regular = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold)
 const form = pdf.getForm(), width = 595.28, height = 841.89, margin = 46
 const ink = rgb(.12, .17, .19), accent = rgb(.15, .43, .36), muted = rgb(.40, .46, .47), border = rgb(.68, .75, .73), pale = rgb(.96, .98, .97)
-pdf.setTitle('Community Workshop Registration - Fillable Sample'); pdf.setAuthor('CreatePDF.si'); pdf.setSubject('Three-page sample with text, checkbox, radio, dropdown and list fields'); pdf.setCreator('CreatePDF.si')
+pdf.setTitle('Community Workshop Registration - Fillable Sample'); pdf.setAuthor('CreatePDF.tech'); pdf.setSubject('Three-page sample with text, checkbox, radio, dropdown and list fields'); pdf.setCreator('CreatePDF.tech')
 
 function text(page, value, x, top, size = 10, font = regular, color = ink) { page.drawText(value, { x, y: height - top - size, size, font, color }) }
 function paragraph(page, value, top, { x = margin, maxWidth = width - margin * 2, size = 10, lineHeight = 15 } = {}) {
@@ -74,7 +74,7 @@ function page(title, number, subtitle) {
   text(item, title, margin, 62, 24, bold)
   text(item, subtitle, margin, 97, 10, regular, muted)
   item.drawLine({ start: { x: margin, y: 57 }, end: { x: width - margin, y: 57 }, thickness: .7, color: border })
-  text(item, 'CreatePDF.si  |  Fictional details for manual form testing', margin, height - 43, 8, regular, muted)
+  text(item, 'CreatePDF.tech  |  Fictional details for manual form testing', margin, height - 43, 8, regular, muted)
   text(item, `${number} / 3`, width - margin - 25, height - 43, 8, regular, muted)
   const linkText = 'Workshop information', linkTop = height - 73
   text(item, linkText, margin, linkTop, 9, regular, accent)

@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Search, Star, Sun, Moon, Download, Settings, Clock, Trash2, X, ArrowUpRight } from 'lucide-react';
+import { Menu, Search, Star, Sun, Moon, Settings, Clock, Trash2, X, ArrowUpRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { VISIBLE_TOOLS as TOOLS, searchTools } from '../data/tools';
 import { clearRecentFiles } from '../services/storage';
 import createPdfLogo from '../assets/createpdf.png';
+import { InstallAppButton } from './InstallAppButton';
 
 export function Topbar({ breadcrumbs = [] }) {
-  const { toggleTheme, theme, isOnline, setSearchOpen, installPwa, deferredInstallPrompt } = useApp();
+  const { toggleTheme, theme, isOnline, setSearchOpen } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
   useEffect(() => { setMenuOpen(false); }, [location]);
@@ -19,7 +20,7 @@ export function Topbar({ breadcrumbs = [] }) {
   return <>
     <header className="workspace-header">
       <div className="header-inner">
-        <Link to="/" className="brand" aria-label="CreatePDF home"><img className="brand-symbol" src={createPdfLogo} width="35" height="35" alt="" /><span>createpdf<span className="brand-domain">.si</span></span></Link>
+        <Link to="/" className="brand" aria-label="CreatePDF.tech home"><img className="brand-symbol" src={createPdfLogo} width="35" height="35" alt="" /><span>createpdf<span className="brand-domain">.tech</span></span></Link>
         <nav className={`workspace-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Main navigation">
           <Link to="/" className={location.pathname === '/' && !location.hash ? 'active' : ''}>Overview</Link>
           <Link to="/#tools" className={location.hash === '#tools' ? 'active' : ''}>All tools <span className="nav-count">{TOOLS.length}</span></Link>
@@ -28,7 +29,7 @@ export function Topbar({ breadcrumbs = [] }) {
         </nav>
         <div className="header-actions">
           <button className="header-search" onClick={() => setSearchOpen(true)} aria-label="Search tools"><Search size={16} /><span>Quick find</span><kbd>Ctrl K</kbd></button>
-          {deferredInstallPrompt && <button className="header-install" onClick={installPwa} title="Install CreatePDF"><Download size={15} /><span>Install app</span></button>}
+          <InstallAppButton />
           <span className={`connection-dot ${isOnline ? '' : 'is-offline'}`} title={isOnline ? 'Online' : 'Offline'} aria-label={isOnline ? 'Online' : 'Offline'} />
           <button className="icon-btn theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
           <Link to="/settings" className="icon-btn settings-link" aria-label="Settings"><Settings size={18} /></Link>

@@ -331,7 +331,7 @@ export async function exportAppData() {
   const stores = {};
   for (const store of DATA_STORES) stores[store] = await serializeValue(await db.getAll(store));
   return {
-    app: 'CreatePDF.si',
+    app: 'CreatePDF.tech',
     version: 1,
     exportedAt: new Date().toISOString(),
     stores,
@@ -339,8 +339,9 @@ export async function exportAppData() {
 }
 
 export async function importAppData(backup) {
-  if (backup?.app !== 'CreatePDF.si' || backup?.version !== 1 || !backup.stores) {
-    throw new Error('This is not a supported CreatePDF.si backup.');
+  // Accept the previous app identifier so existing backups remain restorable.
+  if (!['CreatePDF.tech', 'CreatePDF.si'].includes(backup?.app) || backup?.version !== 1 || !backup.stores) {
+    throw new Error('This is not a supported CreatePDF.tech backup.');
   }
   const recordsByStore = {};
   for (const store of DATA_STORES) {

@@ -12,7 +12,7 @@ export async function exportEditableInvoicePdf(blob, invoice) {
   if (bytes.byteLength > maxDataBytes) throw new Error('The editable invoice data is too large to export. Reduce long descriptions or the signature image.');
   const { PDFDocument } = await getPdfLib();
   const pdf = await PDFDocument.load(await blob.arrayBuffer());
-  await pdf.attach(bytes, dataFilename, { mimeType: 'application/json', description: 'Editable invoice details for reopening in CreatePDF.si' });
+  await pdf.attach(bytes, dataFilename, { mimeType: 'application/json', description: 'Editable invoice details for reopening in CreatePDF.tech' });
   return new Blob([await pdf.save()], { type: 'application/pdf' });
 }
 

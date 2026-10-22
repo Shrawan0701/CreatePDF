@@ -1,6 +1,6 @@
-# CreatePDF.si
+# CreatePDF.tech
 
-CreatePDF.si is a local-first PDF toolkit with 65 registered tools for page management, editing, conversion, privacy, business documents, AI document processing, and collaboration. Core document processing runs in the browser. AI tools use same-repository serverless functions and OpenAI `gpt-4o-mini`.
+CreatePDF.tech is a local-first PDF toolkit with 65 registered tools for page management, editing, conversion, privacy, business documents, AI document processing, and collaboration. Core document processing runs in the browser. AI tools use same-repository serverless functions and OpenAI `gpt-4o-mini`.
 
 ## Run locally
 
@@ -72,7 +72,7 @@ npm audit --omit=dev
 
 `npm run build` creates one public HTML page per tool plus the homepage. Their titles, descriptions, canonical links, Open Graph/Twitter cards, JSON-LD, step-by-step guides, limitations, FAQs and internal links are present in the initial response, without requiring a crawler to execute JavaScript. The interactive app displays the same guide content and updates metadata during client navigation. The generated content contains no uploaded files or locally saved user data.
 
-- The canonical origin defaults to **https://createpdf.si**. If your production domain differs, set the public `VITE_SITE_URL=https://your-domain.example` at build time, including in Vercel, and rebuild. Use the same value locally if you compare development metadata with production. This is a public URL, never an API key.
+- The canonical origin defaults to **https://createpdf.tech**. If your production domain differs, set the public `VITE_SITE_URL=https://your-domain.example` at build time, including in Vercel, and rebuild. Use the same value locally if you compare development metadata with production. This is a public URL, never an API key.
 - `dist/sitemap.xml` lists the homepage and all 65 tool routes. `dist/robots.txt` points to it. Settings and missing pages use `noindex`; unknown URLs return HTTP 404 instead of displaying the homepage with a success status.
 - `vercel.json` explicitly rewrites each tool route and `/settings` to its generated HTML file. API functions and static files are not sent to the homepage. URL aliases redirect to the clean route. Deploy from the repository root with `npm run build` and `dist` as the output directory. Changes to these files take effect after a new Vercel deployment.
 - When adding or renaming a tool, update its entry in `src/seo/toolGuides.js`, then run `npm run seo:routes` and commit the updated `vercel.json`. The build and tests check route coverage. Common conversion/editing tools have dedicated search titles and prominent internal links; every tool has its own guide.
@@ -80,7 +80,7 @@ npm audit --omit=dev
 - The header uses `src/assets/createpdf.png`. After changing that source, run `npm run assets:icons` locally to regenerate the 192/512-pixel install icons, maskable icon, Apple touch icon and browser favicon. Commit the generated `public/icons`, manifest, HTML links and `src/data/brand.js`. Content-based icon filenames and manifest URLs prevent an older install icon from being reused after a logo change; the service worker also revalidates the manifest.
 - WebSite, Organization, WebApplication, WebPage, breadcrumb and tool-list JSON-LD describe actual features. No fabricated ratings, reviews, traffic counts or unsupported rich-result promises are included.
 
-After deploying, verify the domain in [Google Search Console](https://search.google.com/search-console/about), submit `https://createpdf.si/sitemap.xml` (or your configured domain), and inspect a few tool URLs with URL Inspection. Check actual HTTPS URLs, mobile usability, generated metadata and structured data on the deployed host. Indexing and competitive rankings also depend on content usefulness, reputation, links and site performance; a technical SEO implementation cannot guarantee a first-place ranking.
+After deploying, verify the domain in [Google Search Console](https://search.google.com/search-console/about), submit `https://createpdf.tech/sitemap.xml` (or your configured domain), and inspect a few tool URLs with URL Inspection. Check actual HTTPS URLs, mobile usability, generated metadata and structured data on the deployed host. Indexing and competitive rankings also depend on content usefulness, reputation, links and site performance; a technical SEO implementation cannot guarantee a first-place ranking.
 
 `npm run smoke:seo` checks the served HTML and metadata for every route, JavaScript-disabled guide visibility, mobile deep-link refresh, metadata updates during navigation, API isolation, real 404 responses and the social image. It tests the local production server; the Vercel deployment still needs a post-deploy URL check. Implementation references: [Google’s JavaScript SEO guidance](https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics) and [Vercel’s Vite deployment guidance](https://vercel.com/docs/frameworks/frontend/vite).
 

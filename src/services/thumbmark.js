@@ -119,6 +119,6 @@ export async function thumbmarkPdf(canvas, widthMm, background = 'white') {
   const pageWidth = width * 72 / 25.4, pageHeight = pageWidth * canvas.height / canvas.width
   if (pageHeight > 14400) throw new Error('This crop is too tall for PDF export. Crop more closely or download PNG.')
   const page = pdf.addPage([pageWidth, pageHeight]); page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight })
-  pdf.setTitle('Thumbmark'); pdf.setCreator('CreatePDF.si')
+  pdf.setTitle('Thumbmark'); pdf.setCreator('CreatePDF.tech')
   return new Blob([await pdf.save({ useObjectStreams: true })], { type: 'application/pdf' })
 }

@@ -1,11 +1,12 @@
 import { Document, ExternalHyperlink, ImageRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun } from 'docx'
 import { getPdfjsLib, loadPdfBytes, renderPageToCanvas } from './pdfEngine'
 import { detectBorderlessWordTables, detectWordTables, groupWordLines, wordLinkRectangle, wordPageSelection } from './pdfWordLayout'
+import { cleanWordText, joinWordText, logicalWordText, wordLineRegions, wordScript, wordTextNeedsReview } from './pdfWordText'
+import { loadWordFonts } from './pdfWordFonts'
 
 const twips = value => Math.round(value * 20)
 const emu = value => Math.round(value * 12700)
 const identity = [1, 0, 0, 1, 0, 0]
-const cleanText = value => [...value].filter(character => character.codePointAt(0) >= 32 || [9, 10, 13].includes(character.codePointAt(0))).join('')
 
 function collectGraphics(operators, pdfjs, viewport) {
   const segments = [], images = [], fills = []
@@ -55,31 +56,52 @@ function collectGraphics(operators, pdfjs, viewport) {
   return { segments, images, fills }
 }
 
-function fontInfo(page, fontName, fallback) {
+function fontInfo(page, fontName, fallback, text) {
   let font
   try { font = page.commonObjs.get(fontName) } catch { /* PDF font not available. */ }
   const name = (font?.name || '').replace(/^[A-Z]{6}\+/, '')
   const family = /times/i.test(name) ? 'Times New Roman' : /helvetica|arial/i.test(name) ? 'Arial' : /courier|mono/i.test(name || fallback) ? 'Courier New' : /calibri/i.test(name) ? 'Calibri' : /cambria/i.test(name) ? 'Cambria' : /serif/i.test(fallback) && !/sans/i.test(fallback) ? 'Times New Roman' : 'Arial'
-  return { font: family, bold: Boolean(font?.bold || /bold|black|heavy/i.test(name)), italics: Boolean(font?.italic || /italic|oblique/i.test(name)) }
+  const script = wordScript(text, name)
+  return { font: script?.font || family, complex: Boolean(script), rtl: Boolean(script?.rtl), bold: Boolean(font?.bold || /bold|black|heavy/i.test(name)), italics: Boolean(font?.italic || /italic|oblique/i.test(name)) }
 }
 
-function runs(items, left, links, absoluteGaps = true) {
-  const result = [], stops = []
+function runs(items, left, links, absoluteGaps = true, fitWidth) {
+  const groups = [], stops = []
+  const complex = items.some(item => item.complex)
   let previous
   for (const item of items) {
     const gap = previous ? item.x - previous.x - previous.width : 0
-    if (previous && gap > Math.max(2, item.size * .35)) {
-      if (absoluteGaps) { stops.push({ type: 'left', position: twips(item.x - left) }); result.push(new TextRun({ text: '\t', font: item.font, size: Math.round(item.size * 2) })) }
-      else result.push(new TextRun({ text: ' ', font: item.font, size: Math.round(item.size * 2) }))
-    } else if (previous && gap > Math.max(.5, item.size * .12) && !/\s$/.test(previous.text) && !/^\s/.test(item.text)) {
-      result.push(new TextRun({ text: ' ', font: item.font, size: Math.round(item.size * 2) }))
-    }
-    const text = new TextRun({ text: cleanText(item.text), font: item.font, size: Math.max(2, Math.round(item.size * 2)), bold: item.bold, italics: item.italics })
     const link = links.find(link => item.x + item.width / 2 >= link.x && item.x + item.width / 2 <= link.x + link.width && item.y >= link.y && item.y <= link.y + link.height + 2)
-    result.push(link ? new ExternalHyperlink({ link: link.url, children: [text] }) : text)
+    const last = groups.at(-1)
+    const tab = previous && !complex && absoluteGaps && gap > Math.max(2, item.size * .35)
+    if (tab) stops.push({ type: 'left', position: twips(item.x - left) })
+    const same = !tab && last && last.item.font === item.font && last.item.size === item.size && last.item.bold === item.bold && last.item.italics === item.italics && last.item.rtl === item.rtl && last.link === link?.url
+    if (same) last.items.push(item)
+    else {
+      const adjacentCluster = previous && previous.width < .01 && Math.abs(item.x - previous.x) < 1
+      const value = logicalWordText(item.text)
+      const space = previous && !adjacentCluster && gap > Math.max(.5, item.size * .12) && !/\s$/.test(previous.text) && !/^\s/.test(value) && !/^\p{Mark}/u.test(value)
+      groups.push({ item, items: [item], link: link?.url, prefix: tab ? '\t' : space ? ' ' : '' })
+    }
     previous = item
   }
-  return { children: result, tabStops: stops }
+  const prepared = groups.map(group => ({ ...group, text: group.prefix + joinWordText(group.items) }))
+  let scale
+  if (complex && fitWidth > 0) {
+    const context = document.createElement('canvas').getContext('2d')
+    const natural = prepared.reduce((width, group) => {
+      context.font = `${group.item.italics ? 'italic ' : ''}${group.item.bold ? 'bold ' : ''}${Math.max(2, Math.round(group.item.size * 2)) / 2}px "${group.item.font}"`
+      return width + context.measureText(group.text).width
+    }, 0)
+    if (natural > fitWidth * .97) scale = Math.max(1, Math.min(100, Math.floor(fitWidth * .97 / natural * 100)))
+  }
+  const ordered = items.filter(item => item.rtl).length > items.length / 2 ? prepared.reverse() : prepared
+  const rtl = items.filter(item => item.rtl).length > items.length / 2
+  return { children: ordered.map(group => {
+    const item = group.item, size = Math.max(2, Math.round(item.size * 2))
+    const text = new TextRun({ text: cleanWordText(group.text), font: item.font, size, sizeComplexScript: size, bold: item.bold, boldComplexScript: item.bold, italics: item.italics, italicsComplexScript: item.italics, rightToLeft: item.rtl || undefined, scale, snapToGrid: false })
+    return group.link ? new ExternalHyperlink({ link: group.link, children: [text] }) : text
+  }), tabStops: stops, bidirectional: rtl || undefined, alignment: rtl ? 'right' : undefined }
 }
 
 function wordTable(table, links, fills) {
@@ -91,7 +113,7 @@ function wordTable(table, links, fills) {
     rows: table.rows.map((cells, row) => new TableRow({ cantSplit: true, tableHeader: row === 0, height: { value: twips(table.ys[row + 1] - table.ys[row]), rule: 'atLeast' }, children: cells.map((items, column) => {
       const fill = fills.find(fill => fill.x <= table.xs[column] + 2 && fill.x + fill.width >= table.xs[column + 1] - 2 && fill.y <= table.ys[row] + 2 && fill.y + fill.height >= table.ys[row + 1] - 2)
       return new TableCell({ width: { size: widths[column], type: 'dxa' }, margins: { top: 30, bottom: 30, left: 60, right: 60 }, verticalAlign: 'top', shading: fill ? { fill: fill.color } : undefined,
-        children: items.length ? groupWordLines(items).map(line => new Paragraph({ ...runs(line.items, line.items[0].x, links, false), spacing: { before: 0, after: 0, line: twips(line.size * 1.05), lineRule: 'atLeast' } })) : [new Paragraph({ spacing: { before: 0, after: 0 }, children: [new TextRun({ text: '', size: 2 })] })] })
+        children: items.length ? groupWordLines(items).map(line => new Paragraph({ ...runs(line.items, line.items[0].x, links, false, Math.min(widths[column] / 20 - 6, Math.max(...line.items.map(item => item.x + item.width)) - line.items[0].x + 1)), spacing: { before: 0, after: 0, line: twips(line.size * 1.05), lineRule: 'atLeast' } })) : [new Paragraph({ spacing: { before: 0, after: 0 }, children: [new TextRun({ text: '', size: 2 })] })] })
     }) })) })
 }
 
@@ -127,24 +149,28 @@ async function renderWordGraphics(page, pdfjs, tables, includeImages) {
 }
 
 export async function pdfToWord(file, options = {}, progress = () => {}) {
+  progress(2)
   const pdfjs = await getPdfjsLib()
   const task = pdfjs.getDocument({ data: await loadPdfBytes(file), fontExtraProperties: true })
   try {
     const pdf = await task.promise
     const selected = wordPageSelection(options.pageRange || '', pdf.numPages)
+    progress(8)
     const sections = []
-    let tablesCount = 0, imagesCount = 0, scannedPages = 0
+    let tablesCount = 0, imagesCount = 0, scannedPages = 0, textReviewPages = 0
+    const embeddedFonts = new Map()
     for (const [index, number] of selected.entries()) {
       const page = await pdf.getPage(number)
       const viewport = page.getViewport({ scale: 1 })
       const content = await page.getTextContent()
+      if (content.items.some(item => item.str && wordTextNeedsReview(item.str))) textReviewPages++
       const operators = await page.getOperatorList()
       const graphics = collectGraphics(operators, pdfjs, viewport)
       const items = content.items.filter(item => item.str?.trim()).map(item => {
         const transform = pdfjs.Util.transform(viewport.transform, item.transform)
         const size = Math.max(1, Math.hypot(transform[2], transform[3]))
         const style = content.styles[item.fontName]
-        return { text: item.str, x: transform[4], y: transform[5], width: item.width, size, ascent: style?.ascent || .8, ...fontInfo(page, item.fontName, style?.fontFamily) }
+        return { text: item.str, x: transform[4], y: transform[5], width: item.width, size, ascent: style?.ascent || .8, ...fontInfo(page, item.fontName, style?.fontFamily, item.str) }
       })
       const links = (await page.getAnnotations()).filter(annotation => annotation.subtype === 'Link' && /^(https?:|mailto:|tel:)/i.test(annotation.url || '')).map(annotation => {
         const rectangle = wordLinkRectangle(annotation.rect, viewport.transform)
@@ -157,6 +183,7 @@ export async function pdfToWord(file, options = {}, progress = () => {}) {
         children[0].addChildElement(pagePicture(pngBytes(canvas), { x: 0, y: 0, width: viewport.width, height: viewport.height }))
         canvas.width = canvas.height = 0
       } else {
+        for (const font of await loadWordFonts(items.map(item => item.font))) embeddedFonts.set(font.name, font)
         const ruled = options.detectTables === false ? [] : detectWordTables(items, graphics.segments)
         const used = new Set(ruled.flatMap(table => table.items))
         const tables = [...ruled, ...(options.detectTables === false ? [] : detectBorderlessWordTables(items, used))]
@@ -164,12 +191,17 @@ export async function pdfToWord(file, options = {}, progress = () => {}) {
         tablesCount += tables.length
         const blocks = tables.map(table => ({ y: table.y, x: table.x, element: wordTable(table, links, graphics.fills) }))
         for (const line of groupWordLines(items.filter(item => !used.has(item)))) {
-          const left = line.items[0].x
-          const top = Math.max(0, Math.min(...line.items.map(item => item.y - item.size * item.ascent)))
-          const height = Math.max(...line.items.map(item => item.size)) * 1.3
-          blocks.push({ x: left, y: top, element: new Paragraph({ ...runs(line.items, left, links), spacing: { before: 0, after: 0, line: twips(height), lineRule: 'atLeast' },
-            frame: { type: 'absolute', position: { x: twips(left), y: twips(top) }, width: twips(Math.max(10, viewport.width - left - 5)), height: twips(height), anchor: { horizontal: 'page', vertical: 'page' }, wrap: 'none', rule: 'atLeast' },
-          }) })
+          const complex = line.items.some(item => item.complex)
+          const regions = complex ? wordLineRegions(line.items) : [{ items: line.items, x: line.items[0].x }]
+          for (const region of regions) {
+            const left = region.x
+            const top = Math.max(0, Math.min(...region.items.map(item => item.y - item.size * item.ascent)))
+            const height = Math.max(...region.items.map(item => item.size)) * 1.3
+            const width = complex ? Math.max(10, Math.min(viewport.width - left - 2, region.right - left + 2)) : Math.max(10, viewport.width - left - 5)
+            blocks.push({ x: left, y: top, element: new Paragraph({ ...runs(region.items, left, links, !complex, complex ? width - 1 : undefined), spacing: { before: 0, after: 0, line: twips(height), lineRule: 'atLeast' },
+              frame: { type: 'absolute', position: { x: twips(left), y: twips(top) }, width: twips(width), height: twips(height), anchor: { horizontal: 'page', vertical: 'page' }, wrap: 'none', rule: 'atLeast' },
+            }) })
+          }
         }
         children.push(...blocks.sort((a, b) => a.y - b.y || a.x - b.x).map(block => block.element))
         const drawings = await renderWordGraphics(page, pdfjs, tables, options.includeImages !== false)
@@ -182,11 +214,12 @@ export async function pdfToWord(file, options = {}, progress = () => {}) {
       children.push(new Paragraph({ spacing: { before: 0, after: 0, line: 1, lineRule: 'exact' }, children: [new TextRun({ text: '', size: 2 })] }))
       const landscape = viewport.width > viewport.height
       sections.push({ properties: { type: 'nextPage', page: { size: { width: twips(landscape ? viewport.height : viewport.width), height: twips(landscape ? viewport.width : viewport.height), orientation: landscape ? 'landscape' : 'portrait' }, margin: { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0 } } }, children })
-      progress(Math.round((index + 1) / selected.length * 90))
+      progress(8 + Math.round((index + 1) / selected.length * 82))
     }
-    const output = new Document({ title: file.name.replace(/\.pdf$/i, ''), styles: { default: { document: { run: { font: 'Arial', size: 22 }, paragraph: { spacing: { before: 0, after: 0 } } } } }, sections })
+    const output = new Document({ title: file.name.replace(/\.pdf$/i, ''), fonts: [...embeddedFonts.values()], styles: { default: { document: { run: { font: 'Arial', size: 22, sizeComplexScript: 22 }, paragraph: { spacing: { before: 0, after: 0 } } } } }, sections })
+    progress(95)
     const blob = await Packer.toBlob(output)
     progress(100)
-    return { blob, pages: selected.length, tables: tablesCount, images: imagesCount, scannedPages }
+    return { blob, pages: selected.length, tables: tablesCount, images: imagesCount, scannedPages, textReviewPages: options.mode === 'appearance' ? 0 : textReviewPages }
   } finally { await task.destroy() }
 }

@@ -19,10 +19,14 @@ async function readConversion(response, progress) {
           const event = JSON.parse(decoder.decode(buffer.subarray(0, end)))
           buffer = buffer.slice(end + 1)
           if (event.type === 'error') throw new Error(event.error)
-          if (event.type === 'progress') progress(null, event.label)
+          if (event.type === 'progress') {
+            const stage = /upload complete|waiting/i.test(event.label) ? 20 : /preparing/i.test(event.label) ? 30 : /starting/i.test(event.label) ? 40 : 60
+            progress(stage, event.label)
+          }
           if (event.type === 'pdf') {
             if (!Number.isSafeInteger(event.length) || event.length <= 0) throw new Error('The conversion service returned an invalid PDF size.')
             length = event.length
+            progress(85, 'Downloading PDF')
           }
         }
         if (length === null) {
@@ -37,7 +41,7 @@ async function readConversion(response, progress) {
         received += remaining.length
       }
       if (received > length) throw new Error('The conversion service returned an invalid PDF size.')
-      progress(Math.min(99, Math.floor(received / length * 100)), 'Downloading PDF')
+      progress(Math.min(99, 85 + Math.floor(received / length * 14)), 'Downloading PDF')
     }
     if (length === null || received !== length) throw new Error('The download was interrupted. Please try again.')
     return new Blob(parts, { type: 'application/pdf' })
@@ -48,10 +52,17 @@ async function readConversion(response, progress) {
 }
 
 async function officeToPdf(file, progress = () => {}, presentation = false) {
+  // These percentages represent conversion stages, not elapsed time. Downloads
+  // use actual received bytes; only a validated PDF can complete the progress.
+  let completed = 0
+  const report = (value, label) => {
+    completed = Math.max(completed, value)
+    progress(completed, label)
+  }
   const kind = presentation ? 'powerpoint' : 'word'
   const extension = presentation ? 'PPTX' : 'DOCX'
   const streamType = `application/vnd.createpdf.${kind}-stream`
-  progress(null, 'Uploading document')
+  report(5, 'Uploading document')
   // Older iOS Safari versions support AbortController but not
   // AbortSignal.timeout. Keep the same endpoint and conversion engine.
   const controller = new AbortController()
@@ -72,13 +83,13 @@ async function officeToPdf(file, progress = () => {}, presentation = false) {
     }
     const contentType = response.headers.get('content-type') || ''
     let blob
-    if (contentType.includes(streamType)) blob = await readConversion(response, progress)
+    if (contentType.includes(streamType)) blob = await readConversion(response, report)
     else if (contentType.includes('application/pdf')) {
-      progress(null, 'Downloading PDF')
+      report(85, 'Downloading PDF')
       blob = await response.blob()
     } else throw new Error('The conversion service did not return a PDF.')
     if (await blob.slice(0, 5).text() !== '%PDF-') throw new Error('The conversion service returned an invalid PDF.')
-    progress(100, 'PDF ready')
+    report(100, 'PDF ready')
     return blob
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('Conversion took too long. Please try again.')

@@ -55,7 +55,7 @@ export async function exportWhiteboard(board, format, title) {
     paintWhiteboard(context, board)
     if (format === 'png') return await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('PNG export failed.')), 'image/png'))
     const { PDFDocument } = await getPdfLib(), pdf = await PDFDocument.create()
-    pdf.setTitle(title || 'Whiteboard'); pdf.setCreator('CreatePDF.si')
+    pdf.setTitle(title || 'Whiteboard'); pdf.setCreator('CreatePDF.tech')
     const image = await pdf.embedPng(canvas.toDataURL('image/png'))
     const wide = board.width >= board.height, page = pdf.addPage(wide ? [841.89, 595.28] : [595.28, 841.89])
     const scale = Math.min((page.getWidth() - 48) / board.width, (page.getHeight() - 48) / board.height)

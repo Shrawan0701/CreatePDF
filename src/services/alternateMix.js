@@ -153,7 +153,7 @@ export async function mixPdfDocuments(sources, options = mixDefaults(), progress
   }
   check(signal)
   const skipped = sources.reduce((total, source, index) => total + remapInternalLinks(source.document, copies[index], output), 0)
-  output.setTitle('Alternated PDF'); output.setCreator('CreatePDF.si')
+  output.setTitle('Alternated PDF'); output.setCreator('CreatePDF.tech')
   progress(95, 'Saving your mixed PDF')
   const bytes = await output.save()
   check(signal); progress(100, 'Mixed PDF ready')

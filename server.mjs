@@ -46,4 +46,4 @@ sockets.on('connection', (socket) => {
   })
 })
 
-server.listen(port, () => process.stdout.write(`CreatePDF.si listening on http://localhost:${port}\n`))
+server.listen(port, () => process.stdout.write(`CreatePDF.tech listening on http://localhost:${port}\n`))

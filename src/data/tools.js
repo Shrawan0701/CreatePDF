@@ -1,4 +1,4 @@
-// Tool Registry — single source of truth for all CreatePDF.si tools
+// Tool Registry — single source of truth for all CreatePDF.tech tools
 
 import {
   ScanLine, Workflow, Layers, Scissors, Minimize2, Grid3x3, RotateCcw,

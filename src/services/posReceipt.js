@@ -55,7 +55,7 @@ export async function createPosReceiptPdf(source) {
   const { bill, rows } = receiptRows(source)
   const { PDFDocument, StandardFonts, rgb } = await getPdfLib()
   const pdf = await PDFDocument.create()
-  pdf.setTitle(`Receipt ${bill.number}`); pdf.setCreator('CreatePDF.si')
+  pdf.setTitle(`Receipt ${bill.number}`); pdf.setCreator('CreatePDF.tech')
   const regular = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold)
   await document.fonts.ready
   const canvas = document.createElement('canvas'), context = canvas.getContext('2d')

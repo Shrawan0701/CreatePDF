@@ -179,7 +179,7 @@ export async function createNupPdf(source, plan, { signal, onProgress = () => {}
   }
   const title = document.getTitle()
   output.setTitle(title ? `${title} — ${plan.count} pages per sheet` : `${plan.count} pages per sheet`)
-  output.setCreator('CreatePDF.si')
+  output.setCreator('CreatePDF.tech')
   onProgress(92, 'Saving PDF')
   const bytes = await output.save({ useObjectStreams: true, updateFieldAppearances: false, objectsPerTick: 30 })
   check(signal); onProgress(100, 'PDF ready')

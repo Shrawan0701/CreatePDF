@@ -15,14 +15,14 @@ const json = (value) => JSON.stringify(value).replaceAll('<', '\\u003c');
 function head(seo) {
   const entries = [
     ['name', 'description', seo.description], ['name', 'robots', seo.robots],
-    ...Object.entries({ title: seo.title, description: seo.description, type: 'website', url: seo.canonical, site_name: 'CreatePDF.si', locale: 'en_US', image: seo.image, 'image:width': '1200', 'image:height': '630', 'image:alt': 'CreatePDF.si — PDF tools for everyday document work' }).map(([key, value]) => ['property', `og:${key}`, value]),
-    ...Object.entries({ card: 'summary_large_image', title: seo.title, description: seo.description, image: seo.image, 'image:alt': 'CreatePDF.si — PDF tools for everyday document work' }).map(([key, value]) => ['name', `twitter:${key}`, value]),
+    ...Object.entries({ title: seo.title, description: seo.description, type: 'website', url: seo.canonical, site_name: 'CreatePDF.tech', locale: 'en_US', image: seo.image, 'image:width': '1200', 'image:height': '630', 'image:alt': 'CreatePDF.tech — PDF tools for everyday document work' }).map(([key, value]) => ['property', `og:${key}`, value]),
+    ...Object.entries({ card: 'summary_large_image', title: seo.title, description: seo.description, image: seo.image, 'image:alt': 'CreatePDF.tech — PDF tools for everyday document work' }).map(([key, value]) => ['name', `twitter:${key}`, value]),
   ];
   return `<title>${escape(seo.title)}</title>\n${entries.map(([attribute, key, value]) => `<meta ${attribute}="${key}" content="${escape(value)}" />`).join('\n')}\n<link rel="canonical" href="${escape(seo.canonical)}" />\n<script id="page-structured-data" type="application/ld+json">${json(seo.structuredData)}</script>`;
 }
 
 function pageContent(seo) {
-  const header = h('header', { className: 'workspace-header' }, h('div', { className: 'header-inner' }, h('a', { href: '/', className: 'brand', 'aria-label': 'CreatePDF.si home' }, 'createpdf.si'), h('nav', { className: 'workspace-nav', 'aria-label': 'Main navigation' }, h('a', { href: '/' }, 'Overview'), h('a', { href: '/#tools' }, 'All tools'))));
+  const header = h('header', { className: 'workspace-header' }, h('div', { className: 'header-inner' }, h('a', { href: '/', className: 'brand', 'aria-label': 'CreatePDF.tech home' }, 'createpdf.tech'), h('nav', { className: 'workspace-nav', 'aria-label': 'Main navigation' }, h('a', { href: '/' }, 'Overview'), h('a', { href: '/#tools' }, 'All tools'))));
   let content;
   if (seo.tool) content = h('div', { className: 'tool-page' }, h('header', { className: 'tool-page-header' }, h('h1', { className: 'tool-page-title' }, seo.tool.name), h('p', { className: 'tool-page-desc' }, seo.tool.description)), h(ToolGuide, { tool: seo.tool }));
   else if (seo.path === '/') content = h('div', { className: 'workspace-home' }, h('section', { className: 'workspace-intro' }, h('div', { className: 'intro-copy' }, h('h1', null, 'Less PDF friction.', h('br'), h('span', null, 'More getting it done.')), h('p', null, 'Make the edit. Merge the files. Send it off. Simple tools for everything between open and done.'))), h('section', { id: 'tools', className: 'tool-library' }, h('h2', null, 'Explore the PDF toolkit'), h('div', { className: 'directory-grid' }, TOOLS.map((tool) => h('article', { className: 'directory-item', key: tool.id }, h('a', { href: tool.route }, h('div', null, h('h3', null, tool.name), h('p', null, tool.description))))))), h(HomeGuide));

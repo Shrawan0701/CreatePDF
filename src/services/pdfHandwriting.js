@@ -205,7 +205,7 @@ export function drawHandwritingPreview(canvas, plan, index, scale = 1.5) {
 
 export async function createHandwritingPdf(plan, { signal, title = 'Handwritten notes', onProgress } = {}) {
   check(signal)
-  const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit); pdf.setTitle(title); pdf.setCreator('CreatePDF.si')
+  const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit); pdf.setTitle(title); pdf.setCreator('CreatePDF.tech')
   const embedded = new Map(), pageNumberFont = plan.options.pageNumbers ? await pdf.embedFont(StandardFonts.Helvetica) : null
   for (let index = 0; index < plan.pages.length; index++) {
     check(signal); onProgress?.(Math.round(index / plan.pages.length * 95), `Creating page ${index + 1} of ${plan.pages.length}…`); await tick()
